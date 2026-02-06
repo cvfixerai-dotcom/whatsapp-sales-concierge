@@ -1,0 +1,66 @@
+// @ts-nocheck
+/**
+ * Google Calendar OAuth Flow
+ * Handles authorization and token exchange for Google Calendar integration
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/db/client';
+
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/calendar.events',
+].join(' ');
+
+/**
+ * GET /api/auth/google-calendar
+ * Initiates OAuth flow - redirects to Google consent screen
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      return NextResponse.json(
+        { error: 'Google OAuth not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Get the base URL for redirect
+    const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
+    const redirectUri = `${baseUrl}/api/auth/google-calendar/callback`;
+
+    // Store tenant ID in state for callback
+    const state = Buffer.from(JSON.stringify({
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+    })).toString('base64');
+
+    const authUrl = new URL(GOOGLE_AUTH_URL);
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', SCOPES);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
+    authUrl.searchParams.set('state', state);
+
+    return NextResponse.redirect(authUrl.toString());
+  } catch (error) {
+    console.error('[Google Calendar OAuth] Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to initiate OAuth flow' },
+      { status: 500 }
+    );
+  }
+}
