@@ -6,12 +6,35 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db": "tsx src/lib/db/migrate.ts",
+    "db:migrate": "tsx src/lib/db/migrate.ts migrate",
+    "db:seed": "tsx src/lib/db/migrate.ts seed",
+    "db:test-tenant": "tsx src/lib/db/migrate.ts test-tenant",
+    "workers": "tsx src/lib/workers/index.ts",
+    "workers:start": "curl -X POST http://localhost:3000/api/workers/start"
   },
   "dependencies": {
+    "@auth/supabase-adapter": "^1.11.1",
+    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@supabase/supabase-js": "^2.93.3",
+    "@tanstack/react-table": "^8.10.7",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/uuid": "^10.0.0",
+    "@upstash/redis": "^1.36.1",
+    "axios": "^1.13.4",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.2.4",
+    "lucide-react": "^0.292.0",
     "next": "16.1.6",
+    "next-auth": "^4.24.13",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "recharts": "^2.8.0",
+    "resend": "^4.8.0",
+    "twilio": "^5.12.0",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -22,6 +45,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
