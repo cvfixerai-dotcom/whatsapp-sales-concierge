@@ -1,0 +1,617 @@
+// @ts-nocheck
+import { supabaseAdmin } from '../db/client';
+import { twilioService } from '../services/twilio';
+import { redisQueue } from '../queue/redis';
+import { getAIProvider } from './providers';
+import { buildSystemPrompt, getQualificationCriteria, calculateLeadScore } from './prompts';
+import { executeTool } from './tools';
+import { checkHandoffTriggers, logHandoffTrigger } from '../handoff/detector';
+import { notifyHandoffRequest } from '../handoff/notifier';
+
+export interface ProcessMessageParams {
+  tenantId: string;
+  contactId: string;
+  conversationId: string;
+  messageContent: string;
+  language: string;
+}
+
+export interface AIResponse {
+  message: string;
+  content: string;
+  confidence: number;
+  intent: string;
+  sentiment?: string;
+  qualificationData?: {
+    interestLevel: number;
+    timeline?: string;
+    budget?: string;
+    serviceInterest?: string;
+    nextAction?: string;
+  };
+  toolCalls?: ToolCall[];
+  handoffTriggered?: boolean;
+  handoffReason?: string;
+}
+
+export interface ToolCall {
+  name: string;
+  parameters: Record<string, any>;
+  result?: any;
+}
+
+export interface HandoffDetection {
+  needed: boolean;
+  reason?: 'low_confidence' | 'high_value_lead' | 'keyword_trigger' | 'escalation' | 'complex_query';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+}
+
+export interface ConversationContext {
+  tenant: any;
+  contact: any;
+  conversation: any;
+  messages: any[];
+}
+
+export class AIAgent {
+  private static instance: AIAgent;
+
+  private constructor() {}
+
+  static getInstance(): AIAgent {
+    if (!AIAgent.instance) {
+      AIAgent.instance = new AIAgent();
+    }
+    return AIAgent.instance;
+  }
+
+  /**
+   * Process inbound message and generate AI response
+   */
+  async processInboundMessage(params: ProcessMessageParams): Promise<void> {
+    const startTime = Date.now();
+    let aiResponse: AIResponse | null = null;
+    let handoffDetected: HandoffDetection | null = null;
+    let context: ConversationContext | null = null;
+
+    try {
+      console.log(`[AI Agent] Processing message for conversation ${params.conversationId}`);
+
+      // 1. Load context
+      context = await this.loadContext(
+        params.tenantId,
+        params.contactId,
+        params.conversationId
+      );
+
+      // 2. Build AI prompt
+      const systemPrompt = await this.buildSystemPrompt(
+        context.tenant,
+        context.contact,
+        params.language,
+        context.messages
+      );
+      const conversationHistory = this.formatHistory(context.messages);
+
+      // 3. Call AI with tools
+      aiResponse = await this.callAI({
+        provider: context.tenant.ai_provider,
+        model: context.tenant.ai_model,
+        systemPrompt,
+        messages: conversationHistory,
+        newMessage: params.messageContent,
+        tools: this.getAvailableTools(context.tenant),
+        language: params.language,
+        tenant: context.tenant,
+        contact: context.contact,
+      });
+
+      // 4. Process tool calls
+      if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+        await this.executeTools(aiResponse.toolCalls, context);
+      }
+
+      // 5. Check for handoff triggers
+      const handoffResult = await checkHandoffTriggers(
+        { content: params.messageContent, conversation_id: params.conversationId } as any,
+        context.contact,
+        aiResponse
+      );
+
+      if (handoffResult.needed) {
+        console.log(`[AI Agent] Handoff triggered: ${handoffResult.triggers.map(t => t.type).join(', ')}`);
+        
+        // Log triggers
+        for (const trigger of handoffResult.triggers) {
+          await logHandoffTrigger(params.conversationId, trigger, aiResponse);
+        }
+
+        // Send handoff notification
+        const severity = handoffResult.triggers.some(t => t.severity === 'high') ? 'high' : 'medium';
+        await notifyHandoffRequest(
+          params.conversationId,
+          handoffResult.triggers.map(t => t.message).join('; '),
+          severity,
+          handoffResult.triggers.map(t => t.type)
+        );
+
+        // Update AI response to indicate handoff
+        aiResponse.handoffTriggered = true;
+        aiResponse.handoffReason = handoffResult.triggers.map(t => t.message).join('; ');
+      }
+
+      // 6. Save AI response
+      await this.saveMessage({
+        conversation_id: params.conversationId,
+        tenant_id: params.tenantId,
+        direction: 'outbound',
+        sender_type: 'ai',
+        content: aiResponse.message,
+        ai_confidence: aiResponse.confidence,
+        ai_intent: aiResponse.intent,
+        ai_sentiment: aiResponse.sentiment,
+      });
+
+      // 7. Send WhatsApp reply
+      await twilioService.sendWhatsAppMessage(
+        params.tenantId,
+        context.contact.whatsapp_number,
+        aiResponse.message
+      );
+
+      // 8. Update contact scoring and qualification
+      await this.updateLeadScore(params.contactId, aiResponse.qualificationData);
+      await this.updateContactTemperature(
+        params.contactId,
+        aiResponse.qualificationData
+      );
+
+      // 9. Update conversation insights
+      await this.updateConversationInsights(
+        params.conversationId,
+        aiResponse
+      );
+
+      const processingTime = Date.now() - startTime;
+      console.log(`[AI Agent] Message processed in ${processingTime}ms`);
+    } catch (error) {
+      console.error('[AI Agent] Error processing message:', error);
+      
+      // Send error message to user
+      await this.sendErrorMessage(params, context || undefined);
+      
+      // Log error for investigation
+      await this.logProcessingError(params, error as Error, aiResponse, handoffDetected);
+    }
+  }
+
+  /**
+   * Load conversation context
+   */
+  private async loadContext(
+    tenantId: string,
+    contactId: string,
+    conversationId: string
+  ): Promise<ConversationContext> {
+    const [tenant, contact, conversation, messages] = await Promise.all([
+      supabaseAdmin
+        .from('tenants')
+        .select('*')
+        .eq('id', tenantId)
+        .single(),
+      supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', contactId)
+        .single(),
+      supabaseAdmin
+        .from('conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .single(),
+      supabaseAdmin
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(20), // Last 20 messages for context
+    ]);
+
+    return {
+      tenant: tenant.data,
+      contact: contact.data,
+      conversation: conversation.data,
+      messages: messages.data || [],
+    };
+  }
+
+  /**
+   * Build system prompt for AI
+   */
+  private async buildSystemPrompt(
+    tenant: any,
+    contact: any,
+    language: string,
+    messages: any[]
+  ): Promise<string> {
+    // Format conversation history
+    const history = messages
+      .slice(-5) // Last 5 messages for context
+      .map(m => `${m.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m.content}`)
+      .join('\n');
+
+    // Use the new prompt system
+    return buildSystemPrompt(tenant, contact, language, history);
+  }
+
+  /**
+   * Format conversation history for AI
+   */
+  private formatHistory(messages: any[]): any[] {
+    return messages
+      .filter(m => m.sender_type !== 'system')
+      .map(m => ({
+        role: m.sender_type === 'contact' ? 'user' : 'assistant',
+        content: m.content,
+      }))
+      .slice(-10); // Last 10 messages
+  }
+
+  /**
+   * Call AI provider (Claude/GPT)
+   */
+  private async callAI(params: {
+    provider: string;
+    model: string;
+    systemPrompt: string;
+    messages: any[];
+    newMessage: string;
+    tools: any[];
+    language: string;
+    tenant: any;
+    contact: any;
+  }): Promise<AIResponse> {
+    try {
+      // Get API key from environment based on provider
+      let apiKey = '';
+      if (params.provider === 'anthropic') {
+        apiKey = process.env.ANTHROPIC_API_KEY || '';
+      } else if (params.provider === 'openai') {
+        apiKey = process.env.OPENAI_API_KEY || '';
+      }
+
+      if (!apiKey) {
+        throw new Error(`API key not configured for provider: ${params.provider}`);
+      }
+
+      // Get the AI provider
+      const provider = getAIProvider(params.provider, apiKey, params.model);
+      
+      // Call the AI
+      const response = await provider.call({
+        systemPrompt: params.systemPrompt,
+        messages: params.messages,
+        newMessage: params.newMessage,
+        tools: params.tools,
+        language: params.language,
+        temperature: 0.7,
+        maxTokens: 1000,
+      });
+
+      return response;
+    } catch (error) {
+      console.error('AI provider error:', error);
+      
+      // Return a fallback response
+      const fallbackMessage = this.generateFallbackResponse(params.newMessage, params.language);
+      return {
+        message: fallbackMessage,
+        content: fallbackMessage,
+        confidence: 0.1,
+        intent: 'error',
+        sentiment: 'neutral',
+      };
+    }
+  }
+
+  /**
+   * Generate fallback response when AI fails
+   */
+  private generateFallbackResponse(message: string, language: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+      return language === 'ar' ? 'مرحباً! كيف يمكنني مساعدتك اليوم؟' : 'Hello! How can I help you today?';
+    } else if (lowerMessage.includes('appointment') || lowerMessage.includes('book')) {
+      return language === 'ar' ? 'يسعدني حجز موعد لك. سيتواصل معك فريقنا قريباً.' : "I'd be happy to book an appointment for you. Our team will contact you shortly.";
+    } else if (lowerMessage.includes('price') || lowerMessage.includes('cost')) {
+      return language === 'ar' ? 'للحصول على معلومات الأسعار، سيتواصل معك فريقنا قريباً.' : 'For pricing information, our team will contact you shortly.';
+    } else {
+      return language === 'ar' ? 'شكراً لرسالتك. سيعود إليك فريقنا قريباً.' : 'Thank you for your message. Our team will get back to you shortly.';
+    }
+  }
+
+  /**
+   * Detect intent from message
+   */
+  private detectIntent(message: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('appointment') || lowerMessage.includes('book')) return 'booking';
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost')) return 'pricing';
+    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) return 'greeting';
+    if (lowerMessage.includes('complaint') || lowerMessage.includes('problem')) return 'complaint';
+    
+    return 'inquiry';
+  }
+
+  /**
+   * Detect sentiment from message
+   */
+  private detectSentiment(message: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('angry') || lowerMessage.includes('frustrated')) return 'negative';
+    if (lowerMessage.includes('happy') || lowerMessage.includes('great')) return 'positive';
+    
+    return 'neutral';
+  }
+
+  /**
+   * Get available tools for AI
+   */
+  private getAvailableTools(tenant: any): any[] {
+    // Import tools dynamically
+    const { getAvailableTools } = require('./tools');
+    return getAvailableTools(tenant.ai_provider || 'anthropic');
+  }
+
+  /**
+   * Execute AI tool calls
+   */
+  private async executeTools(toolCalls: ToolCall[], context: ConversationContext): Promise<void> {
+    for (const toolCall of toolCalls) {
+      try {
+        console.log(`[AI Agent] Executing tool: ${toolCall.name}`);
+        
+        // Prepare parameters with context
+        const parameters = {
+          ...toolCall.parameters,
+          tenantId: context.tenant.id,
+          contactId: context.contact.id,
+          conversationId: context.conversation.id,
+        };
+
+        // Execute the tool
+        const result = await executeTool(toolCall.name, parameters, context);
+        
+        // Store result
+        toolCall.result = result;
+        
+        // Log success
+        if (result.success) {
+          console.log(`[AI Agent] Tool ${toolCall.name} executed successfully`);
+        } else {
+          console.error(`[AI Agent] Tool ${toolCall.name} failed:`, result.error);
+        }
+      } catch (error) {
+        console.error(`[AI Agent] Error executing tool ${toolCall.name}:`, error);
+        toolCall.result = { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    }
+  }
+
+  /**
+   * Detect if human handoff is needed
+   */
+  private detectHandoff(aiResponse: AIResponse, contact: any): HandoffDetection {
+    // Low confidence
+    if (aiResponse.confidence < 0.70) {
+      return { needed: true, reason: 'low_confidence', priority: 'medium' };
+    }
+
+    // High-value lead
+    if (contact.leadScore > 80 && contact.budget_range === 'high') {
+      return { needed: true, reason: 'high_value_lead', priority: 'high' };
+    }
+
+    // Keywords in message
+    const handoffKeywords = ['human', 'agent', 'person', 'manager', 'complaint', 'sue', 'lawyer'];
+    const messageLower = aiResponse.message.toLowerCase();
+    
+    for (const keyword of handoffKeywords) {
+      if (messageLower.includes(keyword)) {
+        return { needed: true, reason: 'keyword_trigger', priority: 'high' };
+      }
+    }
+
+    // Negative sentiment with complaint intent
+    if (aiResponse.sentiment === 'negative' && aiResponse.intent === 'complaint') {
+      return { needed: true, reason: 'escalation', priority: 'urgent' };
+    }
+
+    // Complex query (multiple questions)
+    const questionMarks = (aiResponse.message.match(/\?/g) || []).length;
+    if (questionMarks > 2) {
+      return { needed: true, reason: 'complex_query', priority: 'medium' };
+    }
+
+    return { needed: false };
+  }
+
+  /**
+   * Request human handoff
+   */
+  private async requestHumanHandoff(
+    conversationId: string,
+    reason: string,
+    priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium'
+  ): Promise<void> {
+    await supabaseAdmin
+      .from('conversations')
+      .update({
+        status: 'handoff-requested',
+        handoff_reason: reason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+
+    // Notify human agents
+    await redisQueue.queueMessage({
+      type: 'ai_response', // Using existing type with handoff payload
+      tenantId: '', // Will be filled by queue
+      payload: {
+        conversationId,
+        reason,
+        priority,
+        timestamp: new Date().toISOString(),
+        handoffRequest: true,
+      },
+      maxRetries: 3,
+    });
+  }
+
+  /**
+   * Save message to database
+   */
+  private async saveMessage(messageData: any): Promise<void> {
+    await supabaseAdmin.from('messages').insert({
+      ...messageData,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Update lead score
+   */
+  private async updateLeadScore(
+    contactId: string,
+    qualificationData?: AIResponse['qualificationData']
+  ): Promise<void> {
+    if (!qualificationData) return;
+
+    // Get industry from contact's tenant
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('tenant_id')
+      .eq('id', contactId)
+      .single();
+
+    if (!contact) return;
+
+    const { data: tenant } = await supabaseAdmin
+      .from('tenants')
+      .select('industry')
+      .eq('id', contact.tenant_id)
+      .single();
+
+    // Calculate score based on qualification data
+    const responses = {
+      budget: qualificationData.budget ? 'provided' : undefined,
+      timeline: qualificationData.timeline,
+      interest_level: qualificationData.interestLevel > 70 ? 'high' : qualificationData.interestLevel > 40 ? 'medium' : 'low',
+    };
+
+    const { score } = calculateLeadScore(tenant?.industry || 'other', responses);
+    const newScore = Math.min(100, Math.max(0, score));
+
+    await supabaseAdmin
+      .from('contacts')
+      .update({
+        lead_score: newScore,
+        qualification_status: newScore > 70 ? 'qualified' : 'unqualified',
+        timeline: qualificationData.timeline,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', contactId);
+  }
+
+  /**
+   * Update contact temperature
+   */
+  private async updateContactTemperature(
+    contactId: string,
+    qualificationData?: AIResponse['qualificationData']
+  ): Promise<void> {
+    if (!qualificationData) return;
+
+    let temperature: string = 'cold';
+    
+    if (qualificationData.interestLevel > 80) temperature = 'hot';
+    else if (qualificationData.interestLevel > 50) temperature = 'warm';
+    else if (qualificationData.interestLevel > 20) temperature = 'new';
+
+    await supabaseAdmin
+      .from('contacts')
+      .update({
+        temperature,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', contactId);
+  }
+
+  /**
+   * Update conversation insights
+   */
+  private async updateConversationInsights(
+    conversationId: string,
+    aiResponse: AIResponse
+  ): Promise<void> {
+    await supabaseAdmin
+      .from('conversations')
+      .update({
+        ai_confidence_avg: aiResponse.confidence,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+  }
+
+  /**
+   * Send error message to user
+   */
+  private async sendErrorMessage(
+    params: ProcessMessageParams,
+    context?: ConversationContext
+  ): Promise<void> {
+    const errorMessage = params.language === 'ar' 
+      ? 'عذراً، أواجه بعض الصعوبة. سيعود إليك فريقنا قريباً.'
+      : "I'm sorry, I'm having some trouble. Our team will get back to you shortly.";
+
+    if (context) {
+      await twilioService.sendWhatsAppMessage(
+        params.tenantId,
+        context.contact.whatsapp_number,
+        errorMessage
+      );
+    }
+  }
+
+  /**
+   * Log processing error
+   */
+  private async logProcessingError(
+    params: ProcessMessageParams,
+    error: Error,
+    aiResponse: AIResponse | null,
+    handoffDetected: HandoffDetection | null
+  ): Promise<void> {
+    await supabaseAdmin.from('ai_processing_logs').insert({
+      tenant_id: params.tenantId,
+      contact_id: params.contactId,
+      conversation_id: params.conversationId,
+      message_content: params.messageContent,
+      error_message: error.message,
+      error_stack: error.stack,
+      ai_response: aiResponse,
+      handoff_detected: handoffDetected,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+}
+
+// Export singleton instance
+export const aiAgent = AIAgent.getInstance();

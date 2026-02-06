@@ -1,0 +1,103 @@
+// @ts-nocheck
+import { supabaseAdmin } from '../../db/client';
+import { calculateLeadScore } from './calculate-score';
+
+interface UpdateLeadParams {
+  contactId: string;
+  updates: {
+    name?: string;
+    email?: string;
+    temperature?: string;
+    timeline?: string;
+    budget_range?: string;
+    service_interest?: string;
+    metadata?: Record<string, any>;
+  };
+}
+
+export async function updateLead({ contactId, updates }: UpdateLeadParams): Promise<{
+  success: boolean;
+  newScore?: number;
+  error?: string;
+  contact?: any;
+}> {
+  try {
+    console.log(`[Tool: updateLead] Updating contact ${contactId}`, updates);
+
+    // Validate contact exists
+    const { data: existingContact, error: fetchError } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .eq('id', contactId)
+      .single();
+
+    if (fetchError || !existingContact) {
+      console.error('[Tool: updateLead] Contact not found:', contactId);
+      return {
+        success: false,
+        error: 'Contact not found',
+      };
+    }
+
+    // Prepare update data
+    const updateData = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Only update qualification_status if temperature is being updated
+    if (updates.temperature) {
+      if (updates.temperature === 'booked') {
+        updateData.qualification_status = 'contacted';
+      } else if (updates.temperature === 'hot') {
+        updateData.qualification_status = 'qualified';
+      } else if (updates.temperature === 'cold') {
+        updateData.qualification_status = 'unqualified';
+      }
+    }
+
+    // Update contact record
+    const { data: updatedContact, error: updateError } = await supabaseAdmin
+      .from('contacts')
+      .update(updateData)
+      .eq('id', contactId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('[Tool: updateLead] Update failed:', updateError);
+      return {
+        success: false,
+        error: 'Failed to update contact',
+      };
+    }
+
+    // Recalculate lead score
+    const newScore = await calculateLeadScore(updatedContact);
+
+    // Update the score separately
+    const { error: scoreError } = await supabaseAdmin
+      .from('contacts')
+      .update({ lead_score: newScore, updated_at: new Date().toISOString() })
+      .eq('id', contactId);
+
+    if (scoreError) {
+      console.error('[Tool: updateLead] Score update failed:', scoreError);
+      // Don't fail the operation, just log it
+    }
+
+    console.log(`[Tool: updateLead] Contact updated successfully. New score: ${newScore}`);
+
+    return {
+      success: true,
+      newScore,
+      contact: { ...updatedContact, lead_score: newScore },
+    };
+  } catch (error) {
+    console.error('[Tool: updateLead] Unexpected error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
