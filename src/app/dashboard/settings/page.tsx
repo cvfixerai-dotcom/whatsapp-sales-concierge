@@ -401,7 +401,7 @@ function SettingsPageContent() {
                       value={calendlyApiKey}
                       onChange={(e) => setCalendlyApiKey(e.target.value)}
                       placeholder="Enter your Calendly API key"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10 text-gray-900 bg-white"
                     />
                     <button
                       type="button"
@@ -434,7 +434,7 @@ function SettingsPageContent() {
                     value={calendlyEventUrl}
                     onChange={(e) => setCalendlyEventUrl(e.target.value)}
                     placeholder="e.g., https://calendly.com/your-name/30min"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white"
                   />
                   <p className="mt-1 text-xs text-gray-500">
                     The URL of the event type you want to use for bookings
@@ -495,7 +495,7 @@ function SettingsPageContent() {
                     </p>
                     <button
                       onClick={handleConnectGoogle}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-gray-900 font-medium"
                     >
                       <svg className="h-5 w-5" viewBox="0 0 24 24">
                         <path
@@ -618,7 +618,7 @@ function SettingsPageContent() {
                           value={handoffRecipients.email}
                           onChange={(e) => setHandoffRecipients({ ...handoffRecipients, email: e.target.value })}
                           placeholder="Enter email address"
-                          className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                          className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                         />
                       )}
                     </div>
@@ -648,7 +648,7 @@ function SettingsPageContent() {
                           value={handoffRecipients.whatsapp}
                           onChange={(e) => setHandoffRecipients({ ...handoffRecipients, whatsapp: e.target.value })}
                           placeholder="+1234567890 (with country code)"
-                          className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                          className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                         />
                       )}
                     </div>
@@ -679,7 +679,7 @@ function SettingsPageContent() {
                             value={handoffRecipients.telegram_chat_id}
                             onChange={(e) => setHandoffRecipients({ ...handoffRecipients, telegram_chat_id: e.target.value })}
                             placeholder="Telegram Chat ID"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                           />
                           <p className="mt-1 text-xs text-gray-500">
                             Start a chat with our bot and send /start to get your Chat ID
@@ -717,7 +717,7 @@ function SettingsPageContent() {
                           max="60"
                           value={escalationTimeout}
                           onChange={(e) => setEscalationTimeout(parseInt(e.target.value) || 5)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
                         />
                       </div>
                       <div>
@@ -727,7 +727,7 @@ function SettingsPageContent() {
                         <select
                           value={escalationChannel}
                           onChange={(e) => setEscalationChannel(e.target.value as any)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
                         >
                           <option value="email">Email</option>
                           <option value="whatsapp">WhatsApp</option>
@@ -764,7 +764,7 @@ function SettingsPageContent() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
       <SettingsPageContent />
     </Suspense>
   );
