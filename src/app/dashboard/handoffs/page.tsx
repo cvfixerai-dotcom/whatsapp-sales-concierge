@@ -22,6 +22,11 @@ import {
   UserCheck,
   ArrowRight,
   AlertTriangle,
+  Activity,
+  Users,
+  TrendingUp,
+  Settings,
+  CreditCard,
 } from 'lucide-react';
 
 interface HandoffRequest {
@@ -356,16 +361,32 @@ export default function HandoffsPage() {
         <aside className="w-64 bg-white shadow-sm min-h-screen">
           <nav className="mt-5 px-2">
             <a href="/dashboard" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-              <MessageSquare className="mr-3 h-5 w-5" />
+              <Activity className="mr-3 h-5 w-5" />
               Dashboard
             </a>
             <a href="/dashboard/leads" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <User className="mr-3 h-5 w-5" />
+              <Users className="mr-3 h-5 w-5" />
               Leads
+            </a>
+            <a href="/dashboard/calendar" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <Calendar className="mr-3 h-5 w-5" />
+              Calendar
+            </a>
+            <a href="/dashboard/analytics" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <TrendingUp className="mr-3 h-5 w-5" />
+              Analytics
             </a>
             <a href="/dashboard/handoffs" className="bg-gray-100 text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
               <UserPlus className="mr-3 h-5 w-5" />
               Handoffs
+            </a>
+            <a href="/dashboard/billing" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <CreditCard className="mr-3 h-5 w-5" />
+              Billing
+            </a>
+            <a href="/dashboard/settings" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <Settings className="mr-3 h-5 w-5" />
+              Settings
             </a>
           </nav>
         </aside>

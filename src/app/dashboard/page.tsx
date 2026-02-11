@@ -32,7 +32,9 @@ import {
   Settings,
   Download,
   Eye,
-  Plus
+  Plus,
+  UserPlus,
+  CreditCard,
 } from 'lucide-react';
 
 interface KPICard {
@@ -387,6 +389,18 @@ export default function Dashboard() {
             <a href="/dashboard/analytics" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
               <TrendingUp className="mr-3 h-5 w-5" />
               Analytics
+            </a>
+            <a href="/dashboard/handoffs" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <UserPlus className="mr-3 h-5 w-5" />
+              Handoffs
+            </a>
+            <a href="/dashboard/billing" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <CreditCard className="mr-3 h-5 w-5" />
+              Billing
+            </a>
+            <a href="/dashboard/settings" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <Settings className="mr-3 h-5 w-5" />
+              Settings
             </a>
           </nav>
         </aside>

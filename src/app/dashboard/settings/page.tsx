@@ -20,6 +20,11 @@ import {
   Mail,
   Phone,
   Send,
+  Activity,
+  Users,
+  TrendingUp,
+  UserPlus,
+  CreditCard,
 } from 'lucide-react';
 
 interface TenantSettings {
@@ -256,17 +261,70 @@ function SettingsPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Settings className="h-8 w-8 text-gray-600" />
-            Settings
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Configure your calendar integration and handoff notifications
-          </p>
+      {/* Top Navigation */}
+      <nav className="bg-white shadow-sm border-b">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                {session?.user?.name?.[0]?.toUpperCase()}
+              </div>
+            </div>
+          </div>
         </div>
+      </nav>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="w-64 bg-white shadow-sm min-h-screen">
+          <nav className="mt-5 px-2">
+            <a href="/dashboard" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+              <Activity className="mr-3 h-5 w-5" />
+              Dashboard
+            </a>
+            <a href="/dashboard/leads" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <Users className="mr-3 h-5 w-5" />
+              Leads
+            </a>
+            <a href="/dashboard/calendar" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <Calendar className="mr-3 h-5 w-5" />
+              Calendar
+            </a>
+            <a href="/dashboard/analytics" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <TrendingUp className="mr-3 h-5 w-5" />
+              Analytics
+            </a>
+            <a href="/dashboard/handoffs" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <UserPlus className="mr-3 h-5 w-5" />
+              Handoffs
+            </a>
+            <a href="/dashboard/billing" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <CreditCard className="mr-3 h-5 w-5" />
+              Billing
+            </a>
+            <a href="/dashboard/settings" className="bg-gray-100 text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
+              <Settings className="mr-3 h-5 w-5" />
+              Settings
+            </a>
+          </nav>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-6">
+          <div className="max-w-4xl">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <Settings className="h-8 w-8 text-gray-600" />
+                Settings
+              </h1>
+              <p className="mt-2 text-gray-600">
+                Configure your calendar integration and handoff notifications
+              </p>
+            </div>
 
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200">
@@ -757,6 +815,8 @@ function SettingsPageContent() {
             </div>
           </form>
         )}
+          </div>
+        </main>
       </div>
     </div>
   );
