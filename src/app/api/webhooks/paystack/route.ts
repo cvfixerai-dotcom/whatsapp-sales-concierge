@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
         await handleSuccessfulCharge(event.data);
         break;
       
+      case 'charge.failed':
+        await handleChargeFailed(event.data);
+        break;
+      
       case 'subscription.create':
         await handleSubscriptionCreated(event.data);
         break;
@@ -338,7 +342,7 @@ async function triggerOnboardingWorkflow(tenantId: string) {
 }
 
 // Handle failed charges
-export async function handleChargeFailed(data: any) {
+async function handleChargeFailed(data: any) {
   try {
     const tenantId = data.metadata?.tenant_id;
     const type = data.metadata?.type;
