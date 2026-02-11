@@ -29,27 +29,32 @@ export async function sendEmail({
       };
     }
 
-    // Import Resend
-    const { Resend } = require('resend');
-    const resend = new Resend(resendApiKey);
-
     // Get email template
     const emailContent = getEmailTemplate(template, data, language);
 
-    // Send email via Resend
-    const { data: result, error } = await resend.emails.send({
-      from: fromEmail,
-      to: [to],
-      subject: emailContent.subject,
-      html: emailContent.html,
-      text: emailContent.text,
+    // Send email via Resend REST API (direct fetch, no SDK needed)
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [to],
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text,
+      }),
     });
 
-    if (error) {
-      console.error('[Tool: sendEmail] Resend error:', error);
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('[Tool: sendEmail] Resend error:', result);
       return {
         success: false,
-        error: error.message || 'Failed to send email',
+        error: result.message || 'Failed to send email',
       };
     }
 
