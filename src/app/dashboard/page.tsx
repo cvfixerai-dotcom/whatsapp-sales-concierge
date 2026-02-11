@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
   LineChart,
@@ -35,6 +35,7 @@ import {
   Plus,
   UserPlus,
   CreditCard,
+  LogOut,
 } from 'lucide-react';
 
 interface KPICard {
@@ -402,6 +403,15 @@ export default function Dashboard() {
               <Settings className="mr-3 h-5 w-5" />
               Settings
             </a>
+            <div className="border-t border-gray-200 mt-4 pt-4">
+              <button
+                onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
+              >
+                <LogOut className="mr-3 h-5 w-5" />
+                Sign Out
+              </button>
+            </div>
           </nav>
         </aside>
 

@@ -2,7 +2,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import {
   ColumnDef,
@@ -44,6 +45,7 @@ import {
   Activity,
   TrendingUp,
   CreditCard,
+  LogOut,
 } from 'lucide-react';
 
 interface Lead {
@@ -205,10 +207,10 @@ export default function LeadsPage() {
       
       fetchLeads();
       setEditingLead(null);
-      alert('Lead updated successfully!');
+      toast.success('Lead updated successfully!');
     } catch (error) {
       console.error('Error updating lead:', error);
-      alert('Failed to update lead');
+      toast.error('Failed to update lead');
     }
   };
 
@@ -413,6 +415,15 @@ export default function LeadsPage() {
               <Settings className="mr-3 h-5 w-5" />
               Settings
             </a>
+            <div className="border-t border-gray-200 mt-4 pt-4">
+              <button
+                onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
+              >
+                <LogOut className="mr-3 h-5 w-5" />
+                Sign Out
+              </button>
+            </div>
           </nav>
         </aside>
 
@@ -556,8 +567,19 @@ export default function LeadsPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={columns.length} className="px-6 py-4 text-center text-gray-500">
-                        No leads found
+                      <td colSpan={columns.length} className="px-6 py-16 text-center">
+                        <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No leads yet</h3>
+                        <p className="text-gray-500 mb-6 max-w-sm mx-auto">
+                          Leads will appear here when customers message your WhatsApp number.
+                        </p>
+                        <a
+                          href="/dashboard/settings"
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                        >
+                          <Settings className="w-4 h-4 mr-2" />
+                          Configure WhatsApp
+                        </a>
                       </td>
                     </tr>
                   )}

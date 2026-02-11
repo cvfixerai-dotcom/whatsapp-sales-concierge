@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
   LineChart,
@@ -35,6 +35,7 @@ import {
   Download,
   UserPlus,
   CreditCard,
+  LogOut,
 } from 'lucide-react';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -234,6 +235,15 @@ export default function AnalyticsPage() {
               <Settings className="mr-3 h-5 w-5" />
               Settings
             </a>
+            <div className="border-t border-gray-200 mt-4 pt-4">
+              <button
+                onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
+              >
+                <LogOut className="mr-3 h-5 w-5" />
+                Sign Out
+              </button>
+            </div>
           </nav>
         </aside>
 
@@ -256,6 +266,24 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </div>
+
+          {/* Empty State */}
+          {stats.totalConversations === 0 && stats.totalLeads === 0 && stats.totalAppointments === 0 && (
+            <div className="bg-white rounded-lg shadow p-16 text-center mb-8">
+              <TrendingUp className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Not enough data yet</h3>
+              <p className="text-gray-500 mb-6 max-w-sm mx-auto">
+                Analytics will populate after your first WhatsApp conversations. Connect your number and start receiving messages.
+              </p>
+              <a
+                href="/dashboard/settings"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Go to Settings
+              </a>
+            </div>
+          )}
 
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

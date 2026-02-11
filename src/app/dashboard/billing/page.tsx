@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { PRICING, calculateOverageCost, getTierUpgradePath, calculateMonthlyProjected } from '@/lib/billing/pricing';
 import {
@@ -22,6 +23,7 @@ import {
   Users,
   UserPlus,
   Settings,
+  LogOut,
 } from 'lucide-react';
 
 interface UsageData {
@@ -84,7 +86,7 @@ export default function BillingPage() {
       window.location.href = authorization_url;
     } catch (error) {
       console.error('Error upgrading:', error);
-      alert('Failed to process upgrade. Please try again.');
+      toast.error('Failed to process upgrade. Please try again.');
     } finally {
       setProcessing(null);
     }
@@ -105,7 +107,7 @@ export default function BillingPage() {
       window.location.href = authorization_url;
     } catch (error) {
       console.error('Error purchasing top-up:', error);
-      alert('Failed to process top-up. Please try again.');
+      toast.error('Failed to process top-up. Please try again.');
     } finally {
       setProcessing(null);
     }
@@ -201,6 +203,15 @@ export default function BillingPage() {
               <Settings className="mr-3 h-5 w-5" />
               Settings
             </a>
+            <div className="border-t border-gray-200 mt-4 pt-4">
+              <button
+                onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
+              >
+                <LogOut className="mr-3 h-5 w-5" />
+                Sign Out
+              </button>
+            </div>
           </nav>
         </aside>
 
