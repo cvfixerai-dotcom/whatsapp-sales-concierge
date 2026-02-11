@@ -40,6 +40,8 @@ import {
   X,
   Check,
   AlertCircle,
+  Settings,
+  Activity,
 } from 'lucide-react';
 
 interface Lead {
