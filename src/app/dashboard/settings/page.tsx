@@ -5,6 +5,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { SkeletonPulse } from '@/components/skeletons';
 import { useRouter, useSearchParams } from 'next/navigation';
+import TeamSection from '@/components/TeamSection';
 import {
   Calendar,
   Settings,
@@ -70,7 +71,11 @@ function SettingsPageContent() {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations'>('calendar');
+
+  // Integrations state
+  const [crmWebhookUrl, setCrmWebhookUrl] = useState('');
+  const [savingIntegrations, setSavingIntegrations] = useState(false);
   
   // AI config state
   const [savingAi, setSavingAi] = useState(false);
@@ -80,6 +85,14 @@ function SettingsPageContent() {
   const [aiFallback, setAiFallback] = useState('');
   const [qualificationQuestions, setQualificationQuestions] = useState<string[]>([]);
   const [companyName, setCompanyName] = useState('');
+
+  // Team state
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState('agent');
+  const [inviting, setInviting] = useState(false);
+  const [tempPassword, setTempPassword] = useState('');
 
   // Templates state
   const [savingTemplates, setSavingTemplates] = useState(false);
@@ -137,6 +150,8 @@ function SettingsPageContent() {
       fetchHandoffSettings();
       fetchAiConfig();
       fetchTemplates();
+      fetchTeam();
+      fetchIntegrations();
     }
   }, [status, session]);
 
@@ -217,6 +232,71 @@ function SettingsPageContent() {
     } finally {
       setSavingAi(false);
     }
+  }
+
+  async function fetchIntegrations() {
+    try {
+      const res = await fetch('/api/settings/integrations');
+      if (!res.ok) return;
+      const data = await res.json();
+      setCrmWebhookUrl(data.crm_webhook_url || '');
+    } catch (e) { console.error('Error fetching integrations:', e); }
+  }
+
+  async function handleSaveIntegrations(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingIntegrations(true); setMessage(null);
+    try {
+      const res = await fetch('/api/settings/integrations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crm_webhook_url: crmWebhookUrl }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      setMessage({ type: 'success', text: 'Webhook URL saved!' });
+    } catch (e) {
+      setMessage({ type: 'error', text: 'Failed to save webhook URL' });
+    } finally { setSavingIntegrations(false); }
+  }
+
+  async function fetchTeam() {
+    try {
+      const res = await fetch('/api/team');
+      if (!res.ok) return;
+      const data = await res.json();
+      setTeamMembers(data.members || []);
+    } catch (e) { console.error('Error fetching team:', e); }
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviting(true); setMessage(null); setTempPassword('');
+    try {
+      const res = await fetch('/api/team', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail, full_name: inviteName, invited_role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to invite');
+      setTempPassword(data.temp_password);
+      setMessage({ type: 'success', text: `Invited ${inviteEmail} successfully!` });
+      setInviteEmail(''); setInviteName('');
+      fetchTeam();
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally { setInviting(false); }
+  }
+
+  async function handleRemoveMember(userId: string) {
+    if (!confirm('Remove this team member?')) return;
+    try {
+      const res = await fetch('/api/team', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: 'Member removed' });
+      fetchTeam();
+    } catch (e: any) { setMessage({ type: 'error', text: e.message }); }
   }
 
   async function fetchTemplates() {
@@ -414,6 +494,17 @@ function SettingsPageContent() {
               Templates
             </button>
             <button
+              onClick={() => setActiveTab('integrations')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'integrations'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <ExternalLink className="inline h-4 w-4 mr-2" />
+              Integrations
+            </button>
+            <button
               onClick={() => setActiveTab('handoff')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'handoff'
@@ -424,6 +515,19 @@ function SettingsPageContent() {
               <Bell className="inline h-4 w-4 mr-2" />
               Handoff Notifications
             </button>
+            {(session?.user?.role === 'admin' || session?.user?.role === 'owner') && (
+              <button
+                onClick={() => setActiveTab('team')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'team'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Users className="inline h-4 w-4 mr-2" />
+                Team
+              </button>
+            )}
           </nav>
         </div>
 
@@ -1039,6 +1143,62 @@ function SettingsPageContent() {
               </div>
             </div>
           </form>
+        )}
+
+        {/* Integrations Section */}
+        {activeTab === 'integrations' && (
+          <form onSubmit={handleSaveIntegrations}>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <ExternalLink className="h-5 w-5 text-indigo-600" />
+                  CRM / Zapier Integration
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">Connect your CRM via webhook to sync leads and events automatically</p>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">Paste a Zapier or Make webhook URL below. We will POST a JSON payload whenever a lead is created, temperature changes, an appointment is booked, or a handoff is triggered.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+                  <input type="url" value={crmWebhookUrl} onChange={e => setCrmWebhookUrl(e.target.value)} placeholder="https://hooks.zapier.com/hooks/catch/..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-gray-900 bg-white" />
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Event types sent:</p>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li><code className="bg-gray-200 px-1 rounded">lead.created</code> — New contact from WhatsApp</li>
+                    <li><code className="bg-gray-200 px-1 rounded">lead.temperature_changed</code> — Lead score updated</li>
+                    <li><code className="bg-gray-200 px-1 rounded">appointment.booked</code> — Appointment confirmed</li>
+                    <li><code className="bg-gray-200 px-1 rounded">handoff.triggered</code> — Human handoff requested</li>
+                  </ul>
+                </div>
+                <div className="pt-6 border-t border-gray-200">
+                  <button type="submit" disabled={savingIntegrations} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                    {savingIntegrations ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save Webhook URL
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {activeTab === 'team' && (
+          <TeamSection
+            members={teamMembers}
+            uid={session?.user?.id}
+            onRemove={handleRemoveMember}
+            tempPw={tempPassword}
+            email={inviteEmail}
+            setEmail={setInviteEmail}
+            name={inviteName}
+            setName={setInviteName}
+            role={inviteRole}
+            setRole={setInviteRole}
+            busy={inviting}
+            onInvite={handleInvite}
+          />
         )}
           </div>
   );
