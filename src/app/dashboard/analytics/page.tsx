@@ -2,7 +2,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { StatsSkeleton, ChartSkeleton } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
 import {
   LineChart,
@@ -176,78 +177,22 @@ export default function AnalyticsPage() {
     }
   };
 
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="space-y-6">
+        <StatsSkeleton count={5} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ChartSkeleton />
+          <ChartSkeleton />
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">Analytics</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <a href="/dashboard/settings" className="p-2 rounded-md hover:bg-gray-100">
-                <Settings className="w-5 h-5 text-gray-600" />
-              </a>
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                {session?.user?.name?.[0]?.toUpperCase()}
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <div className="flex">
-        <aside className="w-64 bg-white shadow-sm min-h-screen">
-          <nav className="mt-5 px-2">
-            <a href="/dashboard" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-              <Activity className="mr-3 h-5 w-5" />
-              Dashboard
-            </a>
-            <a href="/dashboard/leads" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Users className="mr-3 h-5 w-5" />
-              Leads
-            </a>
-            <a href="/dashboard/calendar" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Calendar className="mr-3 h-5 w-5" />
-              Calendar
-            </a>
-            <a href="/dashboard/analytics" className="bg-gray-100 text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <TrendingUp className="mr-3 h-5 w-5" />
-              Analytics
-            </a>
-            <a href="/dashboard/handoffs" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <UserPlus className="mr-3 h-5 w-5" />
-              Handoffs
-            </a>
-            <a href="/dashboard/billing" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <CreditCard className="mr-3 h-5 w-5" />
-              Billing
-            </a>
-            <a href="/dashboard/settings" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Settings className="mr-3 h-5 w-5" />
-              Settings
-            </a>
-            <div className="border-t border-gray-200 mt-4 pt-4">
-              <button
-                onClick={() => signOut({ callbackUrl: '/auth/login' })}
-                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
-              >
-                <LogOut className="mr-3 h-5 w-5" />
-                Sign Out
-              </button>
-            </div>
-          </nav>
-        </aside>
-
-        <main className="flex-1 p-6">
+    <>
           {/* Period Selector */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex space-x-2">
@@ -418,8 +363,6 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             </div>
           </div>
-        </main>
-      </div>
-    </div>
+    </>
   );
 }

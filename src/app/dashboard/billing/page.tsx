@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
+import { SkeletonPulse } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
 import { PRICING, calculateOverageCost, getTierUpgradePath, calculateMonthlyProjected } from '@/lib/billing/pricing';
 import {
@@ -113,17 +114,28 @@ export default function BillingPage() {
     }
   }
 
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="bg-white rounded-lg shadow p-6">
+          <SkeletonPulse className="h-6 w-32 mb-4" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <SkeletonPulse className="h-20 w-full" />
+            <SkeletonPulse className="h-20 w-full" />
+            <SkeletonPulse className="h-20 w-full" />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <SkeletonPulse className="h-6 w-40 mb-4" />
+          <SkeletonPulse className="h-8 w-full rounded-full" />
+        </div>
       </div>
     );
   }
 
   if (!usage) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
           <h2 className="text-2xl font-semibold text-gray-900">Unable to load billing data</h2>
           <button
@@ -159,64 +171,7 @@ export default function BillingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top Navigation */}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">Billing & Usage</h1>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-sm min-h-screen">
-          <nav className="mt-5 px-2">
-            <a href="/dashboard" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-              <Activity className="mr-3 h-5 w-5" />
-              Dashboard
-            </a>
-            <a href="/dashboard/leads" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Users className="mr-3 h-5 w-5" />
-              Leads
-            </a>
-            <a href="/dashboard/calendar" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Calendar className="mr-3 h-5 w-5" />
-              Calendar
-            </a>
-            <a href="/dashboard/analytics" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <TrendingUp className="mr-3 h-5 w-5" />
-              Analytics
-            </a>
-            <a href="/dashboard/handoffs" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <UserPlus className="mr-3 h-5 w-5" />
-              Handoffs
-            </a>
-            <a href="/dashboard/billing" className="bg-gray-100 text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <CreditCard className="mr-3 h-5 w-5" />
-              Billing
-            </a>
-            <a href="/dashboard/settings" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Settings className="mr-3 h-5 w-5" />
-              Settings
-            </a>
-            <div className="border-t border-gray-200 mt-4 pt-4">
-              <button
-                onClick={() => signOut({ callbackUrl: '/auth/login' })}
-                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
-              >
-                <LogOut className="mr-3 h-5 w-5" />
-                Sign Out
-              </button>
-            </div>
-          </nav>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6 max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto">
           {/* Current Plan */}
           <div className="bg-white rounded-lg shadow p-6 mb-8">
             <div className="flex items-center justify-between mb-4">
@@ -496,8 +451,6 @@ export default function BillingPage() {
               </p>
             )}
           </div>
-        </main>
-      </div>
     </div>
   );
 }

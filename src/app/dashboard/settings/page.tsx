@@ -2,7 +2,8 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { SkeletonPulse } from '@/components/skeletons';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Calendar,
@@ -247,10 +248,19 @@ function SettingsPageContent() {
     }
   }
 
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="max-w-4xl space-y-6">
+        <div className="mb-8">
+          <SkeletonPulse className="h-8 w-48 mb-2" />
+          <SkeletonPulse className="h-4 w-72" />
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <SkeletonPulse className="h-6 w-40 mb-4" />
+          <SkeletonPulse className="h-10 w-full mb-3" />
+          <SkeletonPulse className="h-10 w-full mb-3" />
+          <SkeletonPulse className="h-10 w-full" />
+        </div>
       </div>
     );
   }
@@ -261,69 +271,6 @@ function SettingsPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top Navigation */}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                {session?.user?.name?.[0]?.toUpperCase()}
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-sm min-h-screen">
-          <nav className="mt-5 px-2">
-            <a href="/dashboard" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-              <Activity className="mr-3 h-5 w-5" />
-              Dashboard
-            </a>
-            <a href="/dashboard/leads" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Users className="mr-3 h-5 w-5" />
-              Leads
-            </a>
-            <a href="/dashboard/calendar" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Calendar className="mr-3 h-5 w-5" />
-              Calendar
-            </a>
-            <a href="/dashboard/analytics" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <TrendingUp className="mr-3 h-5 w-5" />
-              Analytics
-            </a>
-            <a href="/dashboard/handoffs" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <UserPlus className="mr-3 h-5 w-5" />
-              Handoffs
-            </a>
-            <a href="/dashboard/billing" className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <CreditCard className="mr-3 h-5 w-5" />
-              Billing
-            </a>
-            <a href="/dashboard/settings" className="bg-gray-100 text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1">
-              <Settings className="mr-3 h-5 w-5" />
-              Settings
-            </a>
-            <div className="border-t border-gray-200 mt-4 pt-4">
-              <button
-                onClick={() => signOut({ callbackUrl: '/auth/login' })}
-                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
-              >
-                <LogOut className="mr-3 h-5 w-5" />
-                Sign Out
-              </button>
-            </div>
-          </nav>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6">
           <div className="max-w-4xl">
             {/* Header */}
             <div className="mb-8">
@@ -826,15 +773,12 @@ function SettingsPageContent() {
           </form>
         )}
           </div>
-        </main>
-      </div>
-    </div>
   );
 }
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
       <SettingsPageContent />
     </Suspense>
   );
