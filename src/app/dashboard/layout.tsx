@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Menu,
   X,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/dashboard/handoffs', label: 'Handoffs', icon: UserPlus },
+  { href: '/dashboard/activity', label: 'Activity Log', icon: FileText },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
@@ -36,6 +38,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/calendar': 'Calendar',
   '/dashboard/analytics': 'Analytics',
   '/dashboard/handoffs': 'Handoff Management',
+  '/dashboard/activity': 'Activity Log',
   '/dashboard/billing': 'Billing',
   '/dashboard/settings': 'Settings',
 };

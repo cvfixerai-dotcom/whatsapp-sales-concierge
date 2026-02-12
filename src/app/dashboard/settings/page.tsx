@@ -27,6 +27,8 @@ import {
   UserPlus,
   CreditCard,
   LogOut,
+  Bot,
+  Sparkles,
 } from 'lucide-react';
 
 interface TenantSettings {
@@ -68,8 +70,25 @@ function SettingsPageContent() {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates'>('calendar');
   
+  // AI config state
+  const [savingAi, setSavingAi] = useState(false);
+  const [aiPersonality, setAiPersonality] = useState('professional');
+  const [aiLanguage, setAiLanguage] = useState('en');
+  const [aiGreeting, setAiGreeting] = useState('');
+  const [aiFallback, setAiFallback] = useState('');
+  const [qualificationQuestions, setQualificationQuestions] = useState<string[]>([]);
+  const [companyName, setCompanyName] = useState('');
+
+  // Templates state
+  const [savingTemplates, setSavingTemplates] = useState(false);
+  const [templates, setTemplates] = useState({
+    appointment_reminder: '',
+    follow_up: '',
+    welcome: '',
+  });
+
   // Calendar form state
   const [calendarProvider, setCalendarProvider] = useState<'calendly' | 'google'>('calendly');
   const [calendlyApiKey, setCalendlyApiKey] = useState('');
@@ -116,6 +135,8 @@ function SettingsPageContent() {
     if (status === 'authenticated' && session?.user?.tenantId) {
       fetchSettings();
       fetchHandoffSettings();
+      fetchAiConfig();
+      fetchTemplates();
     }
   }, [status, session]);
 
@@ -153,6 +174,79 @@ function SettingsPageContent() {
       setEscalationChannel(data.escalation?.escalation_channel || 'email');
     } catch (error) {
       console.error('Error fetching handoff settings:', error);
+    }
+  }
+
+  async function fetchAiConfig() {
+    try {
+      const response = await fetch('/api/settings/ai-config');
+      if (!response.ok) throw new Error('Failed to fetch AI config');
+      const data = await response.json();
+      setAiPersonality(data.ai_personality || 'professional');
+      setAiLanguage(data.ai_language || 'en');
+      setAiGreeting(data.ai_greeting || '');
+      setAiFallback(data.ai_fallback_message || '');
+      setQualificationQuestions(data.qualification_questions || []);
+      setCompanyName(data.company_name || '');
+    } catch (error) {
+      console.error('Error fetching AI config:', error);
+    }
+  }
+
+  async function handleSaveAiConfig(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingAi(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/settings/ai-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ai_personality: aiPersonality,
+          ai_language: aiLanguage,
+          ai_greeting: aiGreeting,
+          ai_fallback_message: aiFallback,
+          qualification_questions: qualificationQuestions,
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to save AI config');
+      setMessage({ type: 'success', text: 'AI configuration saved successfully!' });
+    } catch (error) {
+      console.error('Error saving AI config:', error);
+      setMessage({ type: 'error', text: 'Failed to save AI configuration' });
+    } finally {
+      setSavingAi(false);
+    }
+  }
+
+  async function fetchTemplates() {
+    try {
+      const response = await fetch('/api/settings/templates');
+      if (!response.ok) throw new Error('Failed to fetch templates');
+      const data = await response.json();
+      setTemplates(data.templates || {});
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+    }
+  }
+
+  async function handleSaveTemplates(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingTemplates(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/settings/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates }),
+      });
+      if (!response.ok) throw new Error('Failed to save templates');
+      setMessage({ type: 'success', text: 'Templates saved successfully!' });
+    } catch (error) {
+      console.error('Error saving templates:', error);
+      setMessage({ type: 'error', text: 'Failed to save templates' });
+    } finally {
+      setSavingTemplates(false);
     }
   }
 
@@ -296,6 +390,28 @@ function SettingsPageContent() {
             >
               <Calendar className="inline h-4 w-4 mr-2" />
               Calendar Integration
+            </button>
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'ai'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Bot className="inline h-4 w-4 mr-2" />
+              AI Configuration
+            </button>
+            <button
+              onClick={() => setActiveTab('templates')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'templates'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <MessageSquare className="inline h-4 w-4 mr-2" />
+              Templates
             </button>
             <button
               onClick={() => setActiveTab('handoff')}
@@ -568,6 +684,158 @@ function SettingsPageContent() {
           </div>
         )}
         </>
+        )}
+
+        {/* AI Configuration Section */}
+        {activeTab === 'ai' && (
+          <form onSubmit={handleSaveAiConfig}>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Bot className="h-5 w-5 text-purple-600" />
+                  AI Configuration
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">Customize your AI assistant&apos;s personality and behavior</p>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">AI Personality</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[
+                      { value: 'professional', label: 'Professional', desc: 'Formal and business-like' },
+                      { value: 'friendly', label: 'Friendly', desc: 'Warm and approachable' },
+                      { value: 'casual', label: 'Casual', desc: 'Relaxed and conversational' },
+                    ].map((o) => (
+                      <button key={o.value} type="button" onClick={() => setAiPersonality(o.value)}
+                        className={`p-4 border-2 rounded-lg text-left transition-colors ${aiPersonality === o.value ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="font-medium text-gray-900">{o.label}</div>
+                        <div className="text-xs text-gray-500">{o.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Primary Language</label>
+                  <select value={aiLanguage} onChange={(e) => setAiLanguage(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white">
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="ar">Arabic</option>
+                    <option value="zh">Chinese</option>
+                    <option value="hi">Hindi</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Welcome Greeting</label>
+                  <textarea value={aiGreeting} onChange={(e) => setAiGreeting(e.target.value)} rows={3}
+                    placeholder={`Hi! Welcome to ${companyName || 'our company'}. How can I help you today?`}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" />
+                  <p className="mt-1 text-xs text-gray-500">First message new contacts receive</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fallback Message</label>
+                  <textarea value={aiFallback} onChange={(e) => setAiFallback(e.target.value)} rows={2}
+                    placeholder="I'm not sure I understand. Could you rephrase that?"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" />
+                  <p className="mt-1 text-xs text-gray-500">Used when the AI cannot understand a request</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Qualification Questions</label>
+                  <p className="text-xs text-gray-500 mb-3">Questions the AI asks to qualify leads</p>
+                  <div className="space-y-2">
+                    {qualificationQuestions.map((q, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-6">{i + 1}.</span>
+                        <input type="text" value={q} onChange={(e) => { const u = [...qualificationQuestions]; u[i] = e.target.value; setQualificationQuestions(u); }}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" />
+                        <button type="button" onClick={() => setQualificationQuestions(qualificationQuestions.filter((_, idx) => idx !== i))}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setQualificationQuestions([...qualificationQuestions, ''])}
+                      className="text-sm text-purple-600 hover:text-purple-800 font-medium">+ Add question</button>
+                  </div>
+                </div>
+                <div className="pt-6 border-t border-gray-200">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-purple-500" />Preview
+                  </h3>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-start">
+                      <div className="max-w-xs px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900">
+                        {aiGreeting || `Hi! Welcome to ${companyName || 'our company'}. How can I help you today?`}
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400 text-center">
+                      Tone: <span className="font-medium capitalize">{aiPersonality}</span> &middot; Language: <span className="font-medium uppercase">{aiLanguage}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-6 border-t border-gray-200">
+                  <button type="submit" disabled={savingAi}
+                    className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                    {savingAi ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save AI Configuration
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Templates Section */}
+        {activeTab === 'templates' && (
+          <form onSubmit={handleSaveTemplates}>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-emerald-600" />
+                  WhatsApp Template Messages
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">Configure pre-approved message templates for proactive outreach</p>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> WhatsApp requires template messages to be pre-approved in your Twilio console.
+                    Configure your templates here for internal use by the AI and automation workers.
+                    Use <code className="bg-blue-100 px-1 rounded">{'{{variable}}'}</code> for dynamic values.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Appointment Reminder</label>
+                  <textarea value={templates.appointment_reminder || ''} onChange={(e) => setTemplates({ ...templates, appointment_reminder: e.target.value })} rows={3}
+                    placeholder="Hi {{contact_name}}, reminder about your appointment on {{appointment_time}}. Reply YES to confirm."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-gray-900 bg-white" />
+                  <p className="mt-1 text-xs text-gray-500">Variables: {'{{contact_name}}, {{appointment_time}}, {{company_name}}'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follow-Up Message</label>
+                  <textarea value={templates.follow_up || ''} onChange={(e) => setTemplates({ ...templates, follow_up: e.target.value })} rows={3}
+                    placeholder="Hi {{contact_name}}, just checking in! We spoke about {{topic}}. Any questions?"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-gray-900 bg-white" />
+                  <p className="mt-1 text-xs text-gray-500">Variables: {'{{contact_name}}, {{topic}}, {{company_name}}'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Welcome Message</label>
+                  <textarea value={templates.welcome || ''} onChange={(e) => setTemplates({ ...templates, welcome: e.target.value })} rows={3}
+                    placeholder="Welcome to {{company_name}}! We're excited to help you. How can we assist you today?"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-gray-900 bg-white" />
+                  <p className="mt-1 text-xs text-gray-500">Variables: {'{{contact_name}}, {{company_name}}'}</p>
+                </div>
+                <div className="pt-6 border-t border-gray-200">
+                  <button type="submit" disabled={savingTemplates}
+                    className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                    {savingTemplates ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save Templates
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
         )}
 
         {/* Handoff Notifications Section */}

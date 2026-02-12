@@ -75,6 +75,7 @@ export default function Dashboard() {
   const [recentConversations, setRecentConversations] = useState<Conversation[]>([]);
   const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
   const [handoffRequests, setHandoffRequests] = useState<any[]>([]);
+  const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -304,24 +305,19 @@ export default function Dashboard() {
   const setupRealtimeSubscription = () => {
     if (!session?.user?.tenantId) return;
 
-    const subscription = supabase
+    const channel = supabase
       .channel('dashboard-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations'
-        },
-        (payload) => {
-          console.log('Conversation update:', payload);
-          fetchDashboardData();
-        }
-      )
-      .subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contacts' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, () => fetchDashboardData())
+      .subscribe((status) => {
+        setIsLive(status === 'SUBSCRIBED');
+      });
 
     return () => {
-      supabase.removeChannel(subscription);
+      supabase.removeChannel(channel);
+      setIsLive(false);
     };
   };
 
@@ -349,6 +345,17 @@ export default function Dashboard() {
 
   return (
     <>
+          {/* Live indicator */}
+          {isLive && (
+            <div className="flex items-center gap-2 mb-4">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span className="text-sm font-medium text-green-700">Live</span>
+            </div>
+          )}
+
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {kpiData.map((kpi, index) => (
