@@ -40,38 +40,6 @@ export async function bookAppointment({
       };
     }
 
-    // Determine calendar provider
-    const provider: CalendarProvider = tenant.calendar_provider || 'calendly';
-
-    // Build calendar config
-    const calendarConfig: CalendarConfig = {
-      provider,
-      businessHours: tenant.business_hours,
-      timezone: tenant.business_hours?.timezone || 'UTC',
-    };
-
-    if (provider === 'calendly') {
-      if (!tenant.calendly_api_key) {
-        console.error('[Tool: bookAppointment] Calendly not configured');
-        return {
-          success: false,
-          error: 'Calendly integration not configured',
-        };
-      }
-      calendarConfig.calendlyApiKey = tenant.calendly_api_key;
-      calendarConfig.calendlyEventUrl = tenant.calendly_event_url;
-    } else if (provider === 'google') {
-      if (!tenant.google_calendar_id || !tenant.google_refresh_token) {
-        console.error('[Tool: bookAppointment] Google Calendar not configured');
-        return {
-          success: false,
-          error: 'Google Calendar integration not configured',
-        };
-      }
-      calendarConfig.googleCalendarId = tenant.google_calendar_id;
-      calendarConfig.googleRefreshToken = tenant.google_refresh_token;
-    }
-
     // Get contact information
     const { data: contact, error: contactError } = await supabaseAdmin
       .from('contacts')
@@ -90,34 +58,68 @@ export async function bookAppointment({
     // Prepare invitee data
     const inviteeEmail = contact.email || `${contact.whatsapp_number.replace('whatsapp:', '').replace('+', '')}@wa.placeholder`;
     const inviteeName = contact.name || 'Customer';
+    const companyName = tenant.company_name || 'Our Team';
+    const timezone = tenant.business_hours?.timezone || 'UTC';
 
-    // Book via calendar service
-    const bookingResult = await calendarService.bookAppointment(
-      calendarConfig,
-      slotTime,
-      {
-        name: inviteeName,
-        email: inviteeEmail,
-        phone: contact.whatsapp_number,
-      },
-      {
-        title: `Meeting with ${inviteeName}`,
-        description: `Booked via WhatsApp Sales Concierge\nPhone: ${contact.whatsapp_number}`,
-        duration: 60,
+    // Determine calendar provider and try external booking first
+    const provider: CalendarProvider = tenant.calendar_provider || 'calendly';
+    let meetingLink: string | undefined;
+    let meetingTime: string = slotTime;
+    let eventId: string | undefined;
+    let usedExternalCalendar = false;
+
+    // Try external calendar if configured
+    const hasCalendly = provider === 'calendly' && tenant.calendly_api_key;
+    const hasGoogle = provider === 'google' && tenant.google_calendar_id && tenant.google_refresh_token;
+
+    if (hasCalendly || hasGoogle) {
+      try {
+        const calendarConfig: CalendarConfig = {
+          provider,
+          businessHours: tenant.business_hours,
+          timezone,
+        };
+
+        if (hasCalendly) {
+          calendarConfig.calendlyApiKey = tenant.calendly_api_key;
+          calendarConfig.calendlyEventUrl = tenant.calendly_event_url;
+        } else if (hasGoogle) {
+          calendarConfig.googleCalendarId = tenant.google_calendar_id;
+          calendarConfig.googleRefreshToken = tenant.google_refresh_token;
+        }
+
+        const bookingResult = await calendarService.bookAppointment(
+          calendarConfig,
+          slotTime,
+          { name: inviteeName, email: inviteeEmail, phone: contact.whatsapp_number },
+          {
+            title: `Meeting with ${inviteeName}`,
+            description: `Booked via WhatsApp Sales Concierge\nPhone: ${contact.whatsapp_number}`,
+            duration: 60,
+          }
+        );
+
+        if (bookingResult.success) {
+          meetingLink = bookingResult.meetingLink;
+          meetingTime = bookingResult.meetingTime || slotTime;
+          eventId = bookingResult.eventId;
+          usedExternalCalendar = true;
+          console.log(`[Tool: bookAppointment] Booked via external calendar (${provider})`);
+        } else {
+          console.warn(`[Tool: bookAppointment] External calendar failed: ${bookingResult.error}. Falling back to in-app booking.`);
+        }
+      } catch (calError) {
+        console.warn('[Tool: bookAppointment] External calendar error, falling back to in-app:', calError);
       }
-    );
-
-    if (!bookingResult.success) {
-      console.error('[Tool: bookAppointment] Booking failed:', bookingResult.error);
-      return {
-        success: false,
-        error: bookingResult.error || 'Failed to book appointment',
-      };
+    } else {
+      console.log('[Tool: bookAppointment] No external calendar configured. Using in-app booking.');
     }
 
-    const meetingLink = bookingResult.meetingLink;
-    const meetingTime = bookingResult.meetingTime || slotTime;
-    const eventId = bookingResult.eventId;
+    // In-app booking: always save to DB regardless of external calendar result
+    if (!usedExternalCalendar) {
+      eventId = `inapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      meetingTime = slotTime;
+    }
 
     // Save to database
     const { error: dbError } = await supabaseAdmin
@@ -126,10 +128,10 @@ export async function bookAppointment({
         tenant_id: tenantId,
         contact_id: contactId,
         conversation_id: conversationId,
-        calendar_provider: provider,
+        calendar_provider: usedExternalCalendar ? provider : 'in_app',
         calendar_event_id: eventId,
         scheduled_time: meetingTime,
-        meeting_link: meetingLink,
+        meeting_link: meetingLink || null,
         status: 'scheduled',
         created_at: new Date().toISOString(),
       });
@@ -154,16 +156,17 @@ export async function bookAppointment({
     });
 
     // Send confirmation email if email exists and is not a placeholder
+    const formattedTime = formatDateTime(meetingTime, contact.language || tenant.language || 'en');
     if (contact.email && !contact.email.includes('@wa.placeholder')) {
       try {
         await sendEmail({
           to: contact.email,
           template: 'booking_confirmation',
           data: {
-            company_name: tenant.company_name,
-            meeting_time: formatDateTime(meetingTime, contact.language || tenant.language || 'en'),
-            meeting_link: meetingLink,
-            customer_name: contact.name,
+            company_name: companyName,
+            meeting_time: formattedTime || meetingTime,
+            meeting_link: meetingLink || 'Details will be shared before the meeting',
+            customer_name: inviteeName,
           },
         });
       } catch (emailError) {
@@ -172,12 +175,14 @@ export async function bookAppointment({
       }
     }
 
-    console.log(`[Tool: bookAppointment] Appointment booked successfully via ${provider}`);
+    const bookingMethod = usedExternalCalendar ? provider : 'in-app';
+    console.log(`[Tool: bookAppointment] Appointment booked successfully via ${bookingMethod}`);
 
     return {
       success: true,
-      meeting_link: meetingLink,
-      meeting_time: meetingTime,
+      meeting_link: meetingLink || undefined,
+      meeting_time: formattedTime || meetingTime,
+      booking_method: bookingMethod,
     };
   } catch (error) {
     console.error('[Tool: bookAppointment] Unexpected error:', error);

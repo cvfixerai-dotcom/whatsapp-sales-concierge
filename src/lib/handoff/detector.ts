@@ -157,7 +157,7 @@ export async function checkHandoffTriggers(
   
   // Rapid fire messages (user sending multiple messages quickly)
   const rapidFireCount = await checkRapidFireMessages(message.conversation_id);
-  if (rapidFireCount >= 3) {
+  if (rapidFireCount >= 6) {
     triggers.push({
       type: 'rapid_fire',
       severity: 'medium',
@@ -169,9 +169,9 @@ export async function checkHandoffTriggers(
   const highSeverityTriggers = triggers.filter(t => t.severity === 'high');
   const mediumSeverityTriggers = triggers.filter(t => t.severity === 'medium');
   
-  const needsHandoff = highSeverityTriggers.length > 0 || 
-                       mediumSeverityTriggers.length >= 2 ||
-                       (highSeverityTriggers.length > 0 && mediumSeverityTriggers.length > 0);
+  const needsHandoff = highSeverityTriggers.length >= 2 || 
+                       mediumSeverityTriggers.length >= 3 ||
+                       (highSeverityTriggers.length >= 1 && mediumSeverityTriggers.length >= 2);
   
   // Determine recommended action
   let recommendedAction: 'immediate_handoff' | 'continue_ai' | 'monitor' = 'continue_ai';
@@ -208,25 +208,36 @@ async function getRecentMessages(conversationId: string, limit: number = 5): Pro
 }
 
 function detectRepeatedTopics(messages: Message[]): string[] {
-  if (messages.length < 3) return [];
+  if (messages.length < 4) return [];
   
-  // Simple topic detection based on keywords
+  // Common words to ignore — these are NOT indicators of repeated questions
+  const stopWords = new Set([
+    'hello', 'about', 'would', 'could', 'should', 'please', 'thanks',
+    'thank', 'there', 'their', 'these', 'those', 'which', 'where',
+    'right', 'great', 'other', 'still', 'might', 'think', 'really',
+    'looking', 'interested', 'appointment', 'meeting', 'schedule',
+    'available', 'today', 'tomorrow', 'morning', 'afternoon', 'evening',
+    'email', 'phone', 'number', 'service', 'price', 'budget',
+  ]);
+  
+  // Topic detection based on keywords
   const topics: { [key: string]: number } = {};
   
   messages.forEach(msg => {
     const words = msg.content.toLowerCase().split(/\s+/);
     words.forEach(word => {
-      if (word.length > 4) { // Only consider words longer than 4 characters
+      // Only consider words longer than 5 characters and not stop words
+      if (word.length > 5 && !stopWords.has(word)) {
         topics[word] = (topics[word] || 0) + 1;
       }
     });
   });
   
-  // Find topics mentioned multiple times
+  // Find topics mentioned 3+ times (was 2 — too aggressive)
   return Object.entries(topics)
-    .filter(([_, count]) => count >= 2)
+    .filter(([_, count]) => count >= 3)
     .map(([topic]) => topic)
-    .slice(0, 3); // Return top 3 repeated topics
+    .slice(0, 3);
 }
 
 async function checkRapidFireMessages(conversationId: string): Promise<number> {

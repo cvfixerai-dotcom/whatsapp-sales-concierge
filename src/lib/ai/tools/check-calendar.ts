@@ -50,9 +50,10 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
       if (!tenant.calendly_api_key || !tenant.calendly_event_url) {
         console.error('[Tool: checkCalendar] Calendly not configured — key or URL missing');
         // Return business hours as fallback instead of failing
+        const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
         return {
           success: true,
-          available_slots: generateBusinessHourSlots(tenant.business_hours),
+          available_slots: fallbackSlots,
           fallback: true,
           error_detail: 'Calendly not fully configured, showing business hours instead',
         };
@@ -62,9 +63,10 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
     } else if (provider === 'google') {
       if (!tenant.google_calendar_id || !tenant.google_refresh_token) {
         console.error('[Tool: checkCalendar] Google Calendar not configured');
+        const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
         return {
           success: true,
-          available_slots: generateBusinessHourSlots(tenant.business_hours),
+          available_slots: fallbackSlots,
           fallback: true,
           error_detail: 'Google Calendar not fully configured, showing business hours instead',
         };
@@ -79,9 +81,10 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
     if (!result.success) {
       console.error(`[Tool: checkCalendar] Calendar API failed: ${result.error}`);
       // Fallback to business hours instead of failing completely
+      const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
       return {
         success: true,
-        available_slots: generateBusinessHourSlots(tenant.business_hours),
+        available_slots: fallbackSlots,
         fallback: true,
         error_detail: result.error,
       };
@@ -91,9 +94,10 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
 
     // If calendar returned 0 slots, generate from business hours
     if (!result.availableSlots || result.availableSlots.length === 0) {
+      const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
       return {
         success: true,
-        available_slots: generateBusinessHourSlots(tenant.business_hours),
+        available_slots: fallbackSlots,
         fallback: true,
         error_detail: 'No slots from calendar API, using business hours',
       };
@@ -109,12 +113,39 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
   } catch (error) {
     console.error('[Tool: checkCalendar] Unexpected error:', error);
     // Even on error, return business hour slots so the AI can suggest times
+    const emergencySlots = generateBusinessHourSlots();
     return {
       success: true,
-      available_slots: generateBusinessHourSlots(),
+      available_slots: emergencySlots,
       fallback: true,
       error_detail: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+/**
+ * Filter out slots that are already booked in the appointments table.
+ */
+async function filterBookedSlots(tenantId: string, slots: CalendarSlot[]): Promise<CalendarSlot[]> {
+  try {
+    const now = new Date().toISOString();
+    const { data: booked, error } = await supabaseAdmin
+      .from('appointments')
+      .select('scheduled_time')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'scheduled')
+      .gte('scheduled_time', now);
+
+    if (error || !booked || booked.length === 0) return slots;
+
+    const bookedTimes = new Set(
+      booked.map(b => new Date(b.scheduled_time).toISOString())
+    );
+
+    return slots.filter(slot => !bookedTimes.has(new Date(slot.datetime).toISOString()));
+  } catch (err) {
+    console.warn('[checkCalendar] Could not filter booked slots:', err);
+    return slots;
   }
 }
 
