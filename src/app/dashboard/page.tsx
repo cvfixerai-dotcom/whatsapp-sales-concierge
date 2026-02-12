@@ -20,7 +20,6 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { supabase } from '@/lib/supabase-client';
 import {
   MessageSquare,
   Users,
@@ -88,20 +87,7 @@ export default function Dashboard() {
   }, [status, session]);
 
   const checkOnboardingStatus = async () => {
-    try {
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('onboarding_completed, twilio_account_sid')
-        .eq('id', session?.user?.tenantId)
-        .single();
-      
-      // Redirect to onboarding if not completed and no Twilio setup
-      if (tenant && !tenant.onboarding_completed && !tenant.twilio_account_sid) {
-        router.push('/onboarding');
-      }
-    } catch (error) {
-      console.error('Error checking onboarding:', error);
-    }
+    // Onboarding check is handled by the API route
   };
 
   const fetchDashboardData = async () => {
@@ -110,191 +96,56 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // Try to fetch KPI data from view, fallback to direct queries
-      let kpiResults = null;
-      const { data: kpiData, error: kpiError } = await supabase
-        .from('dashboard_kpis')
-        .select('*')
-        .eq('tenant_id', session.user.tenantId)
-        .single();
-
-      if (kpiError) {
-        console.log('dashboard_kpis view not available, using fallback:', kpiError.message);
-        // Fallback: calculate KPIs directly
-        const [convResult, leadsResult, appointmentsResult] = await Promise.all([
-          supabase.from('conversations').select('id', { count: 'exact' }).eq('tenant_id', session.user.tenantId),
-          supabase.from('contacts').select('id', { count: 'exact' }).eq('tenant_id', session.user.tenantId),
-          supabase.from('appointments').select('id', { count: 'exact' }).eq('tenant_id', session.user.tenantId)
-        ]);
-        
-        kpiResults = {
-          total_conversations: convResult.count || 0,
-          active_leads: leadsResult.count || 0,
-          booked_appointments: appointmentsResult.count || 0,
-          conversion_rate: 0,
-          conversations_change: 0,
-          leads_change: 0,
-          appointments_change: 0,
-          conversion_change: 0
-        };
-      } else {
-        kpiResults = kpiData;
+      const res = await fetch('/api/dashboard/stats');
+      if (!res.ok) {
+        console.error('Dashboard API error:', res.status);
+        return;
       }
+      const data = await res.json();
 
-      // Set KPI data with defaults
+      // Set KPI data
       setKpiData([
         {
           title: 'Total Conversations',
-          value: kpiResults?.total_conversations || 0,
-          change: kpiResults?.conversations_change || 0,
+          value: data.kpis?.total_conversations || 0,
+          change: 0,
           icon: <MessageSquare className="w-5 h-5" />,
           color: 'bg-blue-500'
         },
         {
           title: 'Active Leads',
-          value: kpiResults?.active_leads || 0,
-          change: kpiResults?.leads_change || 0,
+          value: data.kpis?.active_leads || 0,
+          change: 0,
           icon: <Users className="w-5 h-5" />,
           color: 'bg-green-500'
         },
         {
           title: 'Booked Appointments',
-          value: kpiResults?.booked_appointments || 0,
-          change: kpiResults?.appointments_change || 0,
+          value: data.kpis?.booked_appointments || 0,
+          change: 0,
           icon: <Calendar className="w-5 h-5" />,
           color: 'bg-purple-500'
         },
         {
           title: 'Conversion Rate',
-          value: `${kpiResults?.conversion_rate || 0}%`,
-          change: kpiResults?.conversion_change || 0,
+          value: `${data.kpis?.conversion_rate || 0}%`,
+          change: 0,
           icon: <TrendingUp className="w-5 h-5" />,
           color: 'bg-orange-500'
         }
       ]);
 
-      // Fetch conversation volume data
-      const { data: conversations } = await supabase
-        .from('conversations')
-        .select('created_at')
-        .eq('tenant_id', session.user.tenantId)
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-        .order('created_at');
+      // Set chart data
+      setConversationData(
+        (data.conversationVolumeData || []).map((d: any) => ({ date: d.date, conversations: d.count }))
+      );
+      setTemperatureData(data.temperatureData || []);
+      setHourlyData([]);
 
-      if (conversations) {
-        const groupedData = groupConversationsByDate(conversations);
-        setConversationData(groupedData);
-      }
-
-      // Fetch temperature distribution
-      const { data: contacts } = await supabase
-        .from('contacts')
-        .select('temperature')
-        .eq('tenant_id', session.user.tenantId);
-
-      if (contacts) {
-        const tempCounts = contacts.reduce((acc: any, contact) => {
-          acc[contact.temperature || 'new'] = (acc[contact.temperature || 'new'] || 0) + 1;
-          return acc;
-        }, {});
-
-        setTemperatureData(
-          Object.entries(tempCounts).map(([name, value]) => ({ name, value }))
-        );
-      }
-
-      // Fetch hourly performance (may not exist)
-      const { data: hourlyStats, error: hourlyError } = await supabase
-        .from('hourly_stats')
-        .select('*')
-        .eq('tenant_id', session.user.tenantId)
-        .order('hour');
-
-      if (!hourlyError && hourlyStats && hourlyStats.length > 0) {
-        setHourlyData(
-          hourlyStats.map(stat => ({
-            hour: `${stat.hour}:00`,
-            conversations: stat.conversation_count
-          }))
-        );
-      } else {
-        // Default empty hourly data
-        setHourlyData([]);
-      }
-
-      // Fetch recent conversations
-      const { data: recentConvos } = await supabase
-        .from('conversations')
-        .select(`
-          id,
-          created_at,
-          contacts(name, temperature),
-          messages(content)
-        `)
-        .eq('tenant_id', session.user.tenantId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (recentConvos) {
-        setRecentConversations(
-          recentConvos.map(conv => ({
-            id: conv.id,
-            contact_name: conv.contacts?.name || 'Unknown',
-            last_message: conv.messages?.[0]?.content || 'No messages',
-            temperature: conv.contacts?.temperature || 'new',
-            created_at: conv.created_at
-          }))
-        );
-      }
-
-      // Fetch recent bookings
-      const { data: bookings } = await supabase
-        .from('appointments')
-        .select(`
-          id,
-          scheduled_time,
-          status,
-          contacts(name)
-        `)
-        .eq('tenant_id', session.user.tenantId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (bookings) {
-        setRecentBookings(
-          bookings.map(booking => ({
-            id: booking.id,
-            contact_name: booking.contacts?.name || 'Unknown',
-            scheduled_time: booking.scheduled_time,
-            status: booking.status
-          }))
-        );
-      }
-
-      // Fetch handoff requests
-      const { data: handoffs } = await supabase
-        .from('conversations')
-        .select(`
-          id,
-          handoff_reason,
-          created_at,
-          contacts(name)
-        `)
-        .eq('tenant_id', session.user.tenantId)
-        .eq('status', 'handoff-requested')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (handoffs) {
-        setHandoffRequests(
-          handoffs.map(handoff => ({
-            id: handoff.id,
-            reason: handoff.handoff_reason,
-            created_at: handoff.created_at,
-            contact_name: handoff.contacts?.name || 'Unknown'
-          }))
-        );
-      }
+      // Set lists
+      setRecentConversations(data.recentConversations || []);
+      setRecentBookings(data.recentBookings || []);
+      setHandoffRequests(data.handoffRequests || []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -303,36 +154,17 @@ export default function Dashboard() {
   };
 
   const setupRealtimeSubscription = () => {
-    if (!session?.user?.tenantId) return;
+    // Poll every 30 seconds instead of realtime (realtime needs RLS auth)
+    const interval = setInterval(() => {
+      fetchDashboardData();
+    }, 30000);
 
-    const channel = supabase
-      .channel('dashboard-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, () => fetchDashboardData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contacts' }, () => fetchDashboardData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, () => fetchDashboardData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, () => fetchDashboardData())
-      .subscribe((status) => {
-        setIsLive(status === 'SUBSCRIBED');
-      });
+    setIsLive(true);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
       setIsLive(false);
     };
-  };
-
-  const groupConversationsByDate = (conversations: any[]) => {
-    const grouped: { [key: string]: number } = {};
-    
-    conversations.forEach(conv => {
-      const date = new Date(conv.created_at).toLocaleDateString();
-      grouped[date] = (grouped[date] || 0) + 1;
-    });
-
-    return Object.entries(grouped).map(([date, count]) => ({
-      date,
-      conversations: count
-    }));
   };
 
   const formatTime = (timestamp: string) => {

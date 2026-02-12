@@ -19,7 +19,6 @@ import {
   useReactTable,
   Row,
 } from '@tanstack/react-table';
-import { supabase } from '@/lib/supabase-client';
 import {
   ChevronDown,
   ChevronUp,
@@ -131,33 +130,20 @@ export default function LeadsPage() {
 
     try {
       setLoading(true);
-      let query = supabase
-        .from('contacts')
-        .select('*')
-        .eq('tenant_id', session.user.tenantId)
-        .order('last_message_time', { ascending: false });
+      const params = new URLSearchParams();
+      if (temperatureFilter !== 'all') params.set('temperature', temperatureFilter);
+      if (timelineFilter !== 'all') params.set('timeline', timelineFilter);
+      if (dateRange.start) params.set('startDate', dateRange.start);
+      if (dateRange.end) params.set('endDate', dateRange.end);
+      if (searchQuery) params.set('search', searchQuery);
 
-      // Apply filters
-      if (temperatureFilter !== 'all') {
-        query = query.eq('temperature', temperatureFilter);
+      const res = await fetch(`/api/leads?${params.toString()}`);
+      if (!res.ok) {
+        console.error('Leads API error:', res.status);
+        return;
       }
-      if (timelineFilter !== 'all') {
-        query = query.eq('timeline', timelineFilter);
-      }
-      if (dateRange.start) {
-        query = query.gte('created_at', dateRange.start);
-      }
-      if (dateRange.end) {
-        query = query.lte('created_at', dateRange.end);
-      }
-      if (searchQuery) {
-        query = query.or(`name.ilike.%${searchQuery}%,whatsapp_number.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
-      }
-
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      setLeads(data || []);
+      const data = await res.json();
+      setLeads(data.leads || []);
     } catch (error) {
       console.error('Error fetching leads:', error);
     } finally {
@@ -167,17 +153,21 @@ export default function LeadsPage() {
 
   const fetchConversationHistory = async (leadId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .select(`
-          id,
-          messages(content, sender_type, created_at)
-        `)
-        .eq('contact_id', leadId)
-        .single();
-
-      if (error) throw error;
-      setConversationHistory(data);
+      const res = await fetch(`/api/conversations?contact_id=${leadId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      // Get first conversation's messages
+      const conv = data.conversations?.[0];
+      if (conv?.id) {
+        const msgRes = await fetch(`/api/conversations/${conv.id}`);
+        if (msgRes.ok) {
+          const msgData = await msgRes.json();
+          setConversationHistory({
+            id: conv.id,
+            messages: msgData.messages || [],
+          });
+        }
+      }
     } catch (error) {
       console.error('Error fetching conversation:', error);
     }
@@ -195,16 +185,13 @@ export default function LeadsPage() {
     if (!editingLead) return;
 
     try {
-      const { error } = await supabase
-        .from('contacts')
-        .update({
-          ...editForm,
-          notes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingLead.id);
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingLead.id, ...editForm, notes }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error('Failed to update');
       
       fetchLeads();
       setEditingLead(null);

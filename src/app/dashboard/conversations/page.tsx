@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { StatsSkeleton, ListSkeleton } from '@/components/skeletons';
-import { supabase } from '@/lib/supabase-client';
 import {
   MessageSquare,
   User,
@@ -44,46 +43,13 @@ export default function ConversationsPage() {
     if (!session?.user?.tenantId) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('conversations')
-        .select('id, contact_id, status, handoff_requested, created_at, updated_at, contacts(name, whatsapp_number, temperature)')
-        .eq('tenant_id', session.user.tenantId)
-        .order('updated_at', { ascending: false });
-
-      if (error) throw error;
-
-      const items = await Promise.all(
-        (data || []).map(async (conv) => {
-          const { data: msgData } = await supabase
-            .from('messages')
-            .select('content, sender_type, created_at')
-            .eq('conversation_id', conv.id)
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          const { count } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id);
-
-          const lastMsg = msgData?.[0];
-          const contact = conv.contacts;
-          return {
-            id: conv.id,
-            status: conv.status || 'active',
-            handoff_requested: conv.handoff_requested || false,
-            updated_at: conv.updated_at,
-            contact_name: contact?.name || 'Unknown',
-            contact_phone: contact?.whatsapp_number || '',
-            contact_temperature: contact?.temperature || 'new',
-            last_message: lastMsg?.content || 'No messages yet',
-            last_message_time: lastMsg?.created_at || conv.updated_at,
-            last_sender: lastMsg?.sender_type || '',
-            message_count: count || 0,
-          };
-        })
-      );
-      setConversations(items);
+      const res = await fetch('/api/conversations');
+      if (!res.ok) {
+        console.error('Conversations API error:', res.status);
+        return;
+      }
+      const data = await res.json();
+      setConversations(data.conversations || []);
     } catch (error) {
       console.error('Error fetching conversations:', error);
     } finally {
