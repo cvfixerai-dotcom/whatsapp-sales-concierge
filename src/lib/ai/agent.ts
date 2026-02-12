@@ -35,6 +35,7 @@ export interface AIResponse {
 }
 
 export interface ToolCall {
+  id?: string;
   name: string;
   parameters: Record<string, any>;
   result?: any;
@@ -106,9 +107,53 @@ export class AIAgent {
         contact: context.contact,
       });
 
-      // 4. Process tool calls
+      // 4. Process tool calls — execute tools, then make a follow-up AI call with results
       if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+        console.log(`[AI Agent] Executing ${aiResponse.toolCalls.length} tool(s): ${aiResponse.toolCalls.map(t => t.name).join(', ')}`);
         await this.executeTools(aiResponse.toolCalls, context);
+
+        // Build a human-readable summary of tool results
+        const toolResultsSummary = aiResponse.toolCalls.map(tc => {
+          if (tc.name === 'check_calendar') {
+            if (tc.result?.success && tc.result?.available_slots?.length > 0) {
+              return `Calendar check: ${tc.result.available_slots.length} available slots — ${tc.result.available_slots.slice(0, 5).map((s: any) => s.formatted).join(', ')}`;
+            }
+            return `Calendar check: ${tc.result?.error || 'No available slots found'}`;
+          }
+          if (tc.name === 'book_appointment') {
+            if (tc.result?.success) {
+              return `Appointment booked for ${tc.result.meeting_time}${tc.result.meeting_link ? ` — link: ${tc.result.meeting_link}` : ''}`;
+            }
+            return `Booking failed: ${tc.result?.error || 'unknown error'}`;
+          }
+          if (tc.name === 'update_lead') {
+            return `Lead updated${tc.result?.newScore ? ` (score: ${tc.result.newScore})` : ''}`;
+          }
+          if (tc.name === 'send_email') {
+            return tc.result?.success ? 'Email sent successfully' : `Email failed: ${tc.result?.error}`;
+          }
+          return `${tc.name}: ${JSON.stringify(tc.result)}`;
+        }).join('\n');
+
+        console.log(`[AI Agent] Tool results summary: ${toolResultsSummary}`);
+
+        // Make a SECOND AI call with tool results so the AI can respond naturally
+        const enrichedPrompt = systemPrompt + `\n\nTOOL RESULTS (you just executed these tools — use the results in your next response):\n${toolResultsSummary}\n\nIMPORTANT: Respond to the customer based on the tool results above. Be natural and conversational. Keep it to 1-2 sentences. NEVER say "I'm processing" or "please wait".`;
+
+        const followUpResponse = await this.callAI({
+          provider: context.tenant.ai_provider,
+          model: context.tenant.ai_model,
+          systemPrompt: enrichedPrompt,
+          messages: conversationHistory,
+          newMessage: params.messageContent,
+          tools: [], // No tools in follow-up to prevent infinite loops
+          language: params.language,
+          tenant: context.tenant,
+          contact: context.contact,
+        });
+
+        console.log(`[AI Agent] Follow-up response: ${followUpResponse.message.substring(0, 100)}`);
+        aiResponse.message = followUpResponse.message;
       }
 
       // 5. Check for handoff triggers
@@ -138,6 +183,12 @@ export class AIAgent {
         // Update AI response to indicate handoff
         aiResponse.handoffTriggered = true;
         aiResponse.handoffReason = handoffResult.triggers.map(t => t.message).join('; ');
+      }
+
+      // 5b. Safety net — never send empty or placeholder messages
+      if (!aiResponse.message || aiResponse.message.trim().length < 3) {
+        console.warn('[AI Agent] Empty AI response, using fallback');
+        aiResponse.message = this.generateFallbackResponse(params.messageContent, params.language);
       }
 
       // 6. Save AI response

@@ -44,16 +44,18 @@ export class AnthropicProvider extends BaseAIProvider {
           messageText += (messageText ? '\n' : '') + block.text;
         } else if (block.type === 'tool_use') {
           toolCalls.push({
+            id: block.id,
             name: block.name,
             parameters: block.input,
           });
         }
       }
 
-      console.log(`[Anthropic] Response: ${messageText.substring(0, 80)}... | Tools: ${toolCalls.map(t => t.name).join(', ') || 'none'}`);
+      console.log(`[Anthropic] Response: ${messageText.substring(0, 100)}... | Tools: ${toolCalls.map(t => t.name).join(', ') || 'none'} | stop_reason: ${data.stop_reason}`);
 
+      // If AI returned tool_use without text, leave message empty so agent can do a follow-up call
       return {
-        message: messageText || "I'm processing your request...",
+        message: messageText || '',
         confidence: this.calculateConfidence(messageText, params),
         intent: this.detectIntent(params.newMessage),
         sentiment: this.detectSentiment(params.newMessage),
