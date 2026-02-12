@@ -251,7 +251,7 @@ export default function LeadsPage() {
           </div>
           <div>
             <p className="font-medium text-gray-900">{row.getValue('name')}</p>
-            <p className="text-sm text-gray-500">{row.getValue('whatsapp_number')}</p>
+            <p className="text-sm text-gray-500">{row.original.whatsapp_number}</p>
           </div>
         </div>
       ),

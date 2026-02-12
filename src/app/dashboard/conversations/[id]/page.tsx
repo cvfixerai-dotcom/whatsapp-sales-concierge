@@ -440,7 +440,7 @@ export default function ConversationViewer() {
   }
 
   return (
-    <div className="h-screen flex bg-white">
+    <div className="h-[calc(100vh-4rem)] flex bg-white">
       {/* Left Panel - Contact Info */}
       <div className="w-80 border-r border-gray-200 flex flex-col">
         <div className="p-6 border-b border-gray-200">

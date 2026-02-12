@@ -458,8 +458,8 @@ function SettingsPageContent() {
             </div>
 
         {/* Tab Navigation */}
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="flex space-x-8">
+        <div className="mb-6 border-b border-gray-200 sticky top-16 z-20 bg-gray-50 -mx-6 px-6">
+          <nav className="flex space-x-8 overflow-x-auto">
             <button
               onClick={() => setActiveTab('calendar')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${

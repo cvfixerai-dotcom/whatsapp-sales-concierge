@@ -76,7 +76,7 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top Navigation */}
-      <nav className="bg-white shadow-sm border-b">
+      <nav className="bg-white shadow-sm border-b sticky top-0 z-30">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
@@ -113,7 +113,7 @@ export default function DashboardLayout({
         {/* Sidebar */}
         <aside
           className={`
-            fixed md:static inset-y-0 left-0 z-50 w-64 bg-white shadow-sm min-h-screen
+            fixed md:sticky inset-y-0 md:top-16 left-0 z-50 md:z-10 w-64 bg-white shadow-sm md:h-[calc(100vh-4rem)] md:min-h-0
             transform transition-transform duration-200 ease-in-out
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             md:translate-x-0
@@ -130,7 +130,7 @@ export default function DashboardLayout({
             </button>
           </div>
 
-          <nav className="mt-5 px-2 flex flex-col h-[calc(100vh-5rem)]">
+          <nav className="mt-5 px-2 flex flex-col h-[calc(100%-3rem)] overflow-y-auto">
             <div className="flex-1">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
