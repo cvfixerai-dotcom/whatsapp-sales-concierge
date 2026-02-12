@@ -193,7 +193,7 @@ export class AIAgent {
     contactId: string,
     conversationId: string
   ): Promise<ConversationContext> {
-    const [tenant, contact, conversation, messages] = await Promise.all([
+    const [tenant, contact, conversation, messages, customPrompt] = await Promise.all([
       supabaseAdmin
         .from('tenants')
         .select('*')
@@ -214,11 +214,27 @@ export class AIAgent {
         .select('*')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
-        .limit(20), // Last 20 messages for context
+        .limit(20),
+      // Load tenant's custom system prompt from ai_prompts table
+      supabaseAdmin
+        .from('ai_prompts')
+        .select('content')
+        .eq('tenant_id', tenantId)
+        .eq('prompt_type', 'system')
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
+    // Inject custom prompt into tenant object for buildSystemPrompt
+    const tenantData = tenant.data || {};
+    if (customPrompt?.data?.content) {
+      tenantData.ai_system_prompt = customPrompt.data.content;
+    }
+
     return {
-      tenant: tenant.data,
+      tenant: tenantData,
       contact: contact.data,
       conversation: conversation.data,
       messages: messages.data || [],

@@ -85,6 +85,8 @@ function SettingsPageContent() {
   const [aiFallback, setAiFallback] = useState('');
   const [qualificationQuestions, setQualificationQuestions] = useState<string[]>([]);
   const [companyName, setCompanyName] = useState('');
+  const [customSystemPrompt, setCustomSystemPrompt] = useState('');
+  const [industry, setIndustry] = useState('other');
 
   // Team state
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -203,6 +205,8 @@ function SettingsPageContent() {
       setAiFallback(data.ai_fallback_message || '');
       setQualificationQuestions(data.qualification_questions || []);
       setCompanyName(data.company_name || '');
+      setCustomSystemPrompt(data.custom_system_prompt || '');
+      setIndustry(data.industry || 'other');
     } catch (error) {
       console.error('Error fetching AI config:', error);
     }
@@ -222,6 +226,7 @@ function SettingsPageContent() {
           ai_greeting: aiGreeting,
           ai_fallback_message: aiFallback,
           qualification_questions: qualificationQuestions,
+          custom_system_prompt: customSystemPrompt,
         }),
       });
       if (!response.ok) throw new Error('Failed to save AI config');
@@ -862,6 +867,23 @@ function SettingsPageContent() {
                     <button type="button" onClick={() => setQualificationQuestions([...qualificationQuestions, ''])}
                       className="text-sm text-purple-600 hover:text-purple-800 font-medium">+ Add question</button>
                   </div>
+                </div>
+                <div className="pt-6 border-t border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Custom AI Instructions</label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Optional: Add specific instructions for how the AI should sell your product/service.
+                    This overrides the default industry prompt. Describe your offering, pricing, unique selling points, and how to handle common objections.
+                  </p>
+                  <textarea
+                    value={customSystemPrompt}
+                    onChange={(e) => setCustomSystemPrompt(e.target.value)}
+                    rows={6}
+                    placeholder={`Example: We are a premium real estate agency specializing in luxury villas in Dubai Marina. Our price range is AED 2M-15M. Always mention our free property tour service. When customers ask about pricing, offer to schedule a private viewing first. Our key differentiator is our 10-year market expertise and exclusive off-plan deals.`}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white font-mono text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Industry: <span className="font-medium capitalize">{industry?.replace('-', ' ') || 'other'}</span> — The AI automatically adapts its sales approach to your industry.
+                  </p>
                 </div>
                 <div className="pt-6 border-t border-gray-200">
                   <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">

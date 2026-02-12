@@ -35,36 +35,22 @@ export class AnthropicProvider extends BaseAIProvider {
 
       const data = await response.json();
 
-      // Extract the message content
-      const content = data.content[0];
+      // Extract ALL content blocks — text and tool_use
       let messageText = '';
-      let toolCalls: any[] = [];
+      const toolCalls: any[] = [];
 
-      if (content.type === 'text') {
-        messageText = content.text;
-      } else if (content.type === 'tool_use') {
-        toolCalls = [{
-          name: content.name,
-          parameters: content.input,
-        }];
-        
-        // Get the text content from the next message if available
-        if (data.content[1] && data.content[1].type === 'text') {
-          messageText = data.content[1].text;
+      for (const block of data.content || []) {
+        if (block.type === 'text') {
+          messageText += (messageText ? '\n' : '') + block.text;
+        } else if (block.type === 'tool_use') {
+          toolCalls.push({
+            name: block.name,
+            parameters: block.input,
+          });
         }
       }
 
-      // Handle multiple tool calls
-      if (data.content.length > 1) {
-        for (const item of data.content) {
-          if (item.type === 'tool_use') {
-            toolCalls.push({
-              name: item.name,
-              parameters: item.input,
-            });
-          }
-        }
-      }
+      console.log(`[Anthropic] Response: ${messageText.substring(0, 80)}... | Tools: ${toolCalls.map(t => t.name).join(', ') || 'none'}`);
 
       return {
         message: messageText || "I'm processing your request...",
