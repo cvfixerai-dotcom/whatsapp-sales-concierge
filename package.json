@@ -12,7 +12,10 @@
     "db:seed": "tsx src/lib/db/migrate.ts seed",
     "db:test-tenant": "tsx src/lib/db/migrate.ts test-tenant",
     "workers": "tsx src/lib/workers/index.ts",
-    "workers:start": "curl -X POST http://localhost:3000/api/workers/start"
+    "workers:start": "curl -X POST http://localhost:3000/api/workers/start",
+    "test:systems": "tsx tests/test-all-systems.ts",
+    "clear:conversations": "tsx scripts/clear-test-data.ts",
+    "clear:all": "tsx scripts/clear-test-data.ts --all"
   },
   "dependencies": {
     "@auth/supabase-adapter": "^1.11.1",

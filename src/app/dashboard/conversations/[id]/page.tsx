@@ -411,7 +411,7 @@ export default function ConversationViewer() {
           .from('conversations')
           .update({
             assigned_agent_id: session?.user?.id,
-            status: 'human_active',
+            status: 'human-handling',
           })
           .eq('id', conversationId);
         if (error) throw error;

@@ -84,11 +84,11 @@ export async function POST(request: NextRequest) {
       // Message was sent but not saved — still return success
     }
 
-    // Update conversation status to human_active + bump updated_at
+    // Update conversation status to human-handling + bump updated_at
     await supabaseAdmin
       .from('conversations')
       .update({
-        status: 'human_active',
+        status: 'human-handling',
         assigned_agent_id: session.user.id,
         updated_at: new Date().toISOString(),
       })

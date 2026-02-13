@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
     log('Message saved, checking conversation status...');
 
     // 9. Skip AI if a human agent has taken over
-    if (conversation.status === 'human_active' || conversation.status === 'human-handled') {
+    if (conversation.status === 'human-handling' || conversation.status === 'human-handled') {
       log(`Conversation is ${conversation.status} — skipping AI, message saved for human agent`);
     } else {
       // 10. Process AI response inline (no Redis dependency)
