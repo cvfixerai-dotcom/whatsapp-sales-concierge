@@ -167,32 +167,38 @@ export async function POST(request: NextRequest) {
       .update({ message_count: (conversation.message_count || 0) + 1, updated_at: new Date().toISOString() })
       .eq('id', conversation.id);
 
-    log('Message saved, starting AI processing...');
+    log('Message saved, checking conversation status...');
 
-    // 9. Process AI response inline (no Redis dependency)
-    try {
-      const language = contact.language || 'en';
-      await aiAgent.processInboundMessage({
-        tenantId,
-        contactId: contact.id,
-        conversationId: conversation.id,
-        messageContent: messageBody,
-        language,
-      });
-      log('AI response sent successfully');
-    } catch (aiErr) {
-      logErr('AI processing failed', aiErr);
-      // Send fallback message so customer isn't left hanging
+    // 9. Skip AI if a human agent has taken over
+    if (conversation.status === 'human_active' || conversation.status === 'human-handled') {
+      log(`Conversation is ${conversation.status} — skipping AI, message saved for human agent`);
+    } else {
+      // 10. Process AI response inline (no Redis dependency)
+      log('Starting AI processing...');
       try {
-        await twilioService.sendWhatsAppMessage(
+        const language = contact.language || 'en';
+        await aiAgent.processInboundMessage({
           tenantId,
-          contact.whatsapp_number,
-          "Thanks for your message! Our team will get back to you shortly.",
-          { bypassRateLimit: true }
-        );
-        log('Fallback message sent');
-      } catch (fallbackErr) {
-        logErr('Fallback message also failed', fallbackErr);
+          contactId: contact.id,
+          conversationId: conversation.id,
+          messageContent: messageBody,
+          language,
+        });
+        log('AI response sent successfully');
+      } catch (aiErr) {
+        logErr('AI processing failed', aiErr);
+        // Send fallback message so customer isn't left hanging
+        try {
+          await twilioService.sendWhatsAppMessage(
+            tenantId,
+            contact.whatsapp_number,
+            "Thanks for your message! Our team will get back to you shortly.",
+            { bypassRateLimit: true }
+          );
+          log('Fallback message sent');
+        } catch (fallbackErr) {
+          logErr('Fallback message also failed', fallbackErr);
+        }
       }
     }
 

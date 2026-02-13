@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../db/client';
 import { updateLead } from './update-lead';
 import { sendEmail } from './send-email';
 import { calendarService, CalendarConfig, CalendarProvider } from '../../services/calendar';
+import { isSlotAvailable } from '../../services/calendar/inapp';
 
 interface BookingParams {
   tenantId: string;
@@ -117,6 +118,11 @@ export async function bookAppointment({
 
     // In-app booking: always save to DB regardless of external calendar result
     if (!usedExternalCalendar) {
+      // Verify slot is still available before booking
+      const slotFree = await isSlotAvailable(tenantId, slotTime, 30);
+      if (!slotFree) {
+        return { success: false, error: 'That time slot is no longer available. Please choose another time.' };
+      }
       eventId = `inapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       meetingTime = slotTime;
     }
@@ -128,11 +134,16 @@ export async function bookAppointment({
         tenant_id: tenantId,
         contact_id: contactId,
         conversation_id: conversationId,
-        calendar_provider: usedExternalCalendar ? provider : 'in_app',
+        calendar_provider: usedExternalCalendar ? provider : 'inapp',
         calendar_event_id: eventId,
         scheduled_time: meetingTime,
+        duration: 30,
         meeting_link: meetingLink || null,
         status: 'scheduled',
+        customer_name: inviteeName,
+        customer_phone: contact.whatsapp_number,
+        customer_email: contact.email || null,
+        booked_via: 'whatsapp',
         created_at: new Date().toISOString(),
       });
 

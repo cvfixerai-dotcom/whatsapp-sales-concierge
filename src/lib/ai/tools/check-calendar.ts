@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { calendarService, CalendarConfig, CalendarProvider } from '../../services/calendar';
+import { getAvailableSlots } from '../../services/calendar/inapp';
 
 interface CheckCalendarParams {
   tenantId: string;
@@ -29,212 +30,66 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
 
     if (tenantError || !tenant) {
       console.error('[Tool: checkCalendar] Tenant not found:', tenantId, tenantError);
-      return {
-        success: false,
-        error: 'Tenant configuration not found',
-      };
+      return { success: false, error: 'Tenant configuration not found' };
     }
 
-    // Determine calendar provider (default to calendly for backward compatibility)
     const provider: CalendarProvider = tenant.calendar_provider || 'calendly';
-    console.log(`[Tool: checkCalendar] Provider: ${provider}, calendly_key: ${tenant.calendly_api_key ? 'SET' : 'MISSING'}, calendly_url: ${tenant.calendly_event_url || 'MISSING'}, google_cal: ${tenant.google_calendar_id || 'MISSING'}`);
-    
-    // Build calendar config based on provider
-    const calendarConfig: CalendarConfig = {
-      provider,
-      businessHours: tenant.business_hours,
-      timezone: tenant.business_hours?.timezone || 'UTC',
-    };
+    console.log(`[Tool: checkCalendar] Provider: ${provider}`);
 
-    if (provider === 'calendly') {
-      if (!tenant.calendly_api_key || !tenant.calendly_event_url) {
-        console.error('[Tool: checkCalendar] Calendly not configured — key or URL missing');
-        // Return business hours as fallback instead of failing
-        const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
-        return {
-          success: true,
-          available_slots: fallbackSlots,
-          fallback: true,
-          error_detail: 'Calendly not fully configured, showing business hours instead',
+    // --- Try external calendar first if fully configured ---
+    const hasCalendly = provider === 'calendly' && tenant.calendly_api_key && tenant.calendly_event_url;
+    const hasGoogle = provider === 'google' && tenant.google_calendar_id && tenant.google_refresh_token;
+
+    if (hasCalendly || hasGoogle) {
+      try {
+        const calendarConfig: CalendarConfig = {
+          provider,
+          businessHours: tenant.business_hours,
+          timezone: tenant.business_hours?.timezone || 'UTC',
         };
+        if (hasCalendly) {
+          calendarConfig.calendlyApiKey = tenant.calendly_api_key;
+          calendarConfig.calendlyEventUrl = tenant.calendly_event_url;
+        } else {
+          calendarConfig.googleCalendarId = tenant.google_calendar_id;
+          calendarConfig.googleRefreshToken = tenant.google_refresh_token;
+        }
+
+        const result = await calendarService.checkAvailability(calendarConfig, preferredDate);
+
+        if (result.success && result.availableSlots && result.availableSlots.length > 0) {
+          console.log(`[Tool: checkCalendar] Got ${result.availableSlots.length} slots from ${provider}`);
+          return {
+            success: true,
+            available_slots: result.availableSlots.map(s => ({ datetime: s.datetime, formatted: s.formatted })),
+          };
+        }
+        console.log(`[Tool: checkCalendar] External calendar returned 0 slots, falling back to in-app`);
+      } catch (extErr) {
+        console.warn(`[Tool: checkCalendar] External calendar error, using in-app fallback:`, extErr);
       }
-      calendarConfig.calendlyApiKey = tenant.calendly_api_key;
-      calendarConfig.calendlyEventUrl = tenant.calendly_event_url;
-    } else if (provider === 'google') {
-      if (!tenant.google_calendar_id || !tenant.google_refresh_token) {
-        console.error('[Tool: checkCalendar] Google Calendar not configured');
-        const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
-        return {
-          success: true,
-          available_slots: fallbackSlots,
-          fallback: true,
-          error_detail: 'Google Calendar not fully configured, showing business hours instead',
-        };
-      }
-      calendarConfig.googleCalendarId = tenant.google_calendar_id;
-      calendarConfig.googleRefreshToken = tenant.google_refresh_token;
+    } else {
+      console.log(`[Tool: checkCalendar] No external calendar configured, using in-app calendar`);
     }
 
-    // Use the calendar service abstraction
-    const result = await calendarService.checkAvailability(calendarConfig, preferredDate);
+    // --- In-app calendar (primary path) ---
+    const startDate = preferredDate ? new Date(preferredDate) : new Date();
+    const inappSlots = await getAvailableSlots(tenantId, startDate, 7);
 
-    if (!result.success) {
-      console.error(`[Tool: checkCalendar] Calendar API failed: ${result.error}`);
-      // Fallback to business hours instead of failing completely
-      const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
-      return {
-        success: true,
-        available_slots: fallbackSlots,
-        fallback: true,
-        error_detail: result.error,
-      };
-    }
-
-    console.log(`[Tool: checkCalendar] Found ${result.availableSlots?.length || 0} available slots via ${provider}`);
-
-    // If calendar returned 0 slots, generate from business hours
-    if (!result.availableSlots || result.availableSlots.length === 0) {
-      const fallbackSlots = await filterBookedSlots(tenantId, generateBusinessHourSlots(tenant.business_hours));
-      return {
-        success: true,
-        available_slots: fallbackSlots,
-        fallback: true,
-        error_detail: 'No slots from calendar API, using business hours',
-      };
-    }
+    console.log(`[Tool: checkCalendar] In-app calendar returned ${inappSlots.length} slots`);
 
     return {
       success: true,
-      available_slots: result.availableSlots.map(slot => ({
-        datetime: slot.datetime,
-        formatted: slot.formatted,
-      })),
+      available_slots: inappSlots.map(s => ({ datetime: s.datetime, formatted: s.formatted })),
     };
   } catch (error) {
     console.error('[Tool: checkCalendar] Unexpected error:', error);
-    // Even on error, return business hour slots so the AI can suggest times
-    const emergencySlots = generateBusinessHourSlots();
-    return {
-      success: true,
-      available_slots: emergencySlots,
-      fallback: true,
-      error_detail: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-/**
- * Filter out slots that are already booked in the appointments table.
- */
-async function filterBookedSlots(tenantId: string, slots: CalendarSlot[]): Promise<CalendarSlot[]> {
-  try {
-    const now = new Date().toISOString();
-    const { data: booked, error } = await supabaseAdmin
-      .from('appointments')
-      .select('scheduled_time')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'scheduled')
-      .gte('scheduled_time', now);
-
-    if (error || !booked || booked.length === 0) return slots;
-
-    const bookedTimes = new Set(
-      booked.map(b => new Date(b.scheduled_time).toISOString())
-    );
-
-    return slots.filter(slot => !bookedTimes.has(new Date(slot.datetime).toISOString()));
-  } catch (err) {
-    console.warn('[checkCalendar] Could not filter booked slots:', err);
-    return slots;
-  }
-}
-
-/**
- * Generate available slots from business hours when calendar API is unavailable.
- * Returns the next 5 available slots based on business hours config.
- */
-function generateBusinessHourSlots(businessHours?: Record<string, any>): CalendarSlot[] {
-  const slots: CalendarSlot[] = [];
-  const now = new Date();
-  const timezone = businessHours?.timezone || 'UTC';
-  const startHour = businessHours?.start ? parseInt(businessHours.start.split(':')[0]) : 9;
-  const endHour = businessHours?.end ? parseInt(businessHours.end.split(':')[0]) : 17;
-  const workDays = businessHours?.days || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-
-  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-  // Generate slots for the next 7 days
-  for (let dayOffset = 0; dayOffset < 7 && slots.length < 5; dayOffset++) {
-    const date = new Date(now);
-    date.setDate(date.getDate() + dayOffset);
-    const dayName = dayNames[date.getDay()];
-
-    if (!workDays.includes(dayName)) continue;
-
-    // Generate morning and afternoon slots
-    const slotHours = [startHour, startHour + 2, 12, 14, endHour - 2].filter(h => h >= startHour && h < endHour);
-
-    for (const hour of slotHours) {
-      if (slots.length >= 5) break;
-      // Skip past times for today
-      if (dayOffset === 0 && hour <= now.getHours()) continue;
-
-      const slotDate = new Date(date);
-      slotDate.setHours(hour, 0, 0, 0);
-
-      slots.push({
-        datetime: slotDate.toISOString(),
-        formatted: slotDate.toLocaleString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-          timeZone: timezone,
-        }),
-      });
+    // Emergency: still try in-app
+    try {
+      const slots = await getAvailableSlots(tenantId, new Date(), 7);
+      return { success: true, available_slots: slots.map(s => ({ datetime: s.datetime, formatted: s.formatted })) };
+    } catch (_) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
-
-  // If we still have no slots, generate generic ones
-  if (slots.length === 0) {
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    for (const hour of [9, 11, 14]) {
-      const slotDate = new Date(tomorrow);
-      slotDate.setHours(hour, 0, 0, 0);
-      slots.push({
-        datetime: slotDate.toISOString(),
-        formatted: slotDate.toLocaleString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        }),
-      });
-    }
-  }
-
-  return slots;
-}
-
-function formatDateTime(datetime: string, language: string): string {
-  const date = new Date(datetime);
-  
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  };
-
-  if (language === 'ar') {
-    return date.toLocaleDateString('ar-AE', options);
-  }
-  
-  return date.toLocaleDateString('en-US', options);
 }

@@ -102,6 +102,8 @@ export default function ConversationViewer() {
   const [inputMessage, setInputMessage] = useState('');
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [suggestedResponses, setSuggestedResponses] = useState<string[]>([]);
@@ -352,44 +354,72 @@ export default function ConversationViewer() {
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !conversationId) return;
+    if (!inputMessage.trim() || !conversationId || sending) return;
 
+    setSending(true);
+    setSendError('');
     try {
-      const { error } = await supabase
-        .from('messages')
-        .insert({
+      const res = await fetch('/api/conversations/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           conversation_id: conversationId,
-          content: inputMessage,
-          sender_type: 'human',
-          metadata: {
-            agent_id: session?.user?.id,
-          },
-        });
+          content: inputMessage.trim(),
+        }),
+      });
 
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+
+      // Optimistically add message (realtime will also deliver it)
+      if (data.message) {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === data.message.id);
+          if (exists) return prev;
+          return [...prev, data.message];
+        });
+      }
 
       setInputMessage('');
+      setIsHumanMode(true);
     } catch (error) {
       console.error('Error sending message:', error);
+      setSendError(error instanceof Error ? error.message : 'Failed to send');
+      setTimeout(() => setSendError(''), 5000);
+    } finally {
+      setSending(false);
     }
   };
 
   const handleTakeOver = async () => {
     try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({
-          assigned_agent_id: session?.user?.id,
-          status: 'human-handled',
-        })
-        .eq('id', conversationId);
-
-      if (error) throw error;
-
-      setIsHumanMode(true);
-      generateSuggestedResponses(messages);
+      if (isHumanMode) {
+        // Hand back to AI
+        const { error } = await supabase
+          .from('conversations')
+          .update({
+            assigned_agent_id: null,
+            status: 'active',
+          })
+          .eq('id', conversationId);
+        if (error) throw error;
+        setIsHumanMode(false);
+        setSuggestedResponses([]);
+      } else {
+        // Take over
+        const { error } = await supabase
+          .from('conversations')
+          .update({
+            assigned_agent_id: session?.user?.id,
+            status: 'human_active',
+          })
+          .eq('id', conversationId);
+        if (error) throw error;
+        setIsHumanMode(true);
+        generateSuggestedResponses(messages);
+      }
     } catch (error) {
-      console.error('Error taking over conversation:', error);
+      console.error('Error toggling conversation mode:', error);
     }
   };
 
@@ -541,15 +571,20 @@ export default function ConversationViewer() {
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-2">Actions</h3>
             <div className="space-y-2">
-              {!isHumanMode && (
-                <button
-                  onClick={handleTakeOver}
-                  className="w-full flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <UserCheck className="w-4 h-4 mr-2" />
-                  Take Over
-                </button>
-              )}
+              <button
+                onClick={handleTakeOver}
+                className={`w-full flex items-center justify-center px-3 py-2 rounded-lg ${
+                  isHumanMode
+                    ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {isHumanMode ? (
+                  <><Bot className="w-4 h-4 mr-2" />Hand Back to AI</>
+                ) : (
+                  <><UserCheck className="w-4 h-4 mr-2" />Take Over</>
+                )}
+              </button>
               <button
                 onClick={() => setShowNoteModal(true)}
                 className="w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
@@ -557,85 +592,161 @@ export default function ConversationViewer() {
                 <Edit className="w-4 h-4 mr-2" />
                 Add Note
               </button>
-              <button className="w-full flex items-center justify-center px-3 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200">
-                <UserPlus className="w-4 h-4 mr-2" />
-                Handoff
-              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Center Panel - Messages */}
-      <div className="flex-1 flex flex-col">
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender_type === 'contact' ? 'justify-start' : 'justify-end'}`}
-              title={message.confidence ? `AI Confidence: ${(message.confidence * 100).toFixed(0)}%` : ''}
+      {/* Center Panel - WhatsApp-style Chat */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Chat Header */}
+        <div className="bg-[#075e54] px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+              <User className="w-5 h-5 text-gray-600" />
+            </div>
+            <div>
+              <h3 className="text-white font-medium text-sm">{contact.name || 'Unknown'}</h3>
+              <p className="text-green-200 text-xs">{contact.whatsapp_number}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+              isHumanMode ? 'bg-green-400 text-green-900' : 'bg-blue-400 text-blue-900'
+            }`}>
+              {isHumanMode ? 'You' : 'AI'}
+            </span>
+            <button
+              onClick={handleTakeOver}
+              className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isHumanMode
+                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                  : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
             >
-              <div
-                className={`max-w-lg px-4 py-2 rounded-lg ${
-                  message.sender_type === 'contact'
-                    ? 'bg-gray-100 text-gray-900'
-                    : message.sender_type === 'ai'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-green-600 text-white'
-                }`}
-              >
-                <p className="text-sm">{message.content}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <p className={`text-xs ${
-                    message.sender_type === 'contact' 
-                      ? 'text-gray-500' 
-                      : message.sender_type === 'ai'
-                      ? 'text-blue-100'
-                      : 'text-green-100'
-                  }`}>
-                    {new Date(message.created_at).toLocaleTimeString()}
-                  </p>
-                  {message.sender_type === 'ai' && (
-                    <Bot className="w-3 h-3 text-blue-100" />
-                  )}
-                  {message.sender_type === 'human' && (
-                    <UserCheck className="w-3 h-3 text-green-100" />
-                  )}
-                </div>
-                {message.handoff_trigger && (
-                  <div className="mt-2 flex items-center text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                    <AlertCircle className="w-3 h-3 mr-1" />
-                    Handoff: {message.handoff_trigger}
+              {isHumanMode ? (
+                <><Bot className="w-3.5 h-3.5 mr-1" /> Hand Back to AI</>
+              ) : (
+                <><UserCheck className="w-3.5 h-3.5 mr-1" /> Take Over</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" style={{ backgroundColor: '#ECE5DD' }}>
+          {/* Date separator for first message */}
+          {messages.length > 0 && (
+            <div className="flex justify-center mb-2">
+              <span className="bg-white/80 text-gray-600 text-xs px-3 py-1 rounded-lg shadow-sm">
+                {new Date(messages[0].created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+          )}
+
+          {messages.map((message, idx) => {
+            // Show date separator when day changes
+            const showDate = idx > 0 &&
+              new Date(message.created_at).toDateString() !== new Date(messages[idx - 1].created_at).toDateString();
+
+            return (
+              <div key={message.id}>
+                {showDate && (
+                  <div className="flex justify-center my-2">
+                    <span className="bg-white/80 text-gray-600 text-xs px-3 py-1 rounded-lg shadow-sm">
+                      {new Date(message.created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </span>
                   </div>
                 )}
+                <div
+                  className={`flex ${message.sender_type === 'contact' ? 'justify-start' : 'justify-end'} mb-1`}
+                  title={message.confidence ? `AI Confidence: ${(message.confidence * 100).toFixed(0)}%` : ''}
+                >
+                  <div
+                    className={`relative max-w-[70%] px-3 py-2 shadow-sm ${
+                      message.sender_type === 'contact'
+                        ? 'bg-white text-gray-900 rounded-tr-lg rounded-br-lg rounded-bl-lg'
+                        : message.sender_type === 'ai'
+                        ? 'bg-[#d9fdd3] text-gray-900 rounded-tl-lg rounded-br-lg rounded-bl-lg'
+                        : 'bg-[#d9fdd3] text-gray-900 rounded-tl-lg rounded-br-lg rounded-bl-lg'
+                    }`}
+                  >
+                    {/* Sender label */}
+                    {message.sender_type !== 'contact' && (
+                      <p className={`text-xs font-semibold mb-0.5 ${
+                        message.sender_type === 'ai' ? 'text-blue-600' : 'text-green-700'
+                      }`}>
+                        {message.sender_type === 'ai' ? 'AI Assistant' : 'Agent'}
+                      </p>
+                    )}
+                    <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                    <div className="flex items-center justify-end space-x-1 mt-0.5">
+                      <span className="text-[10px] text-gray-500">
+                        {new Date(message.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {message.sender_type === 'ai' && <Bot className="w-3 h-3 text-blue-500" />}
+                      {message.sender_type === 'human' && <UserCheck className="w-3 h-3 text-green-600" />}
+                    </div>
+                    {message.handoff_trigger && (
+                      <div className="mt-1.5 flex items-center text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        Handoff: {message.handoff_trigger}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Message Input */}
-        {isHumanMode && (
-          <div className="border-t border-gray-200 p-4">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Type your message..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={!inputMessage.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </div>
+        {/* Send Error */}
+        {sendError && (
+          <div className="bg-red-50 border-t border-red-200 px-4 py-2 flex items-center text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+            {sendError}
           </div>
         )}
+
+        {/* Suggested Responses (shown above input when in human mode) */}
+        {isHumanMode && suggestedResponses.length > 0 && (
+          <div className="bg-gray-50 border-t border-gray-200 px-4 py-2 flex space-x-2 overflow-x-auto">
+            {suggestedResponses.map((suggestion, idx) => (
+              <button
+                key={idx}
+                onClick={() => setInputMessage(suggestion)}
+                className="flex-shrink-0 px-3 py-1.5 text-xs bg-white border border-gray-300 rounded-full hover:bg-gray-100 text-gray-700"
+              >
+                {suggestion.length > 50 ? suggestion.substring(0, 50) + '...' : suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Message Input — always visible */}
+        <div className="bg-[#f0f0f0] px-3 py-2 flex items-center space-x-2 flex-shrink-0">
+          <input
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+            placeholder={isHumanMode ? 'Type a message...' : 'Take over to reply...'}
+            disabled={!isHumanMode}
+            className="flex-1 px-4 py-2 rounded-full border-0 bg-white text-gray-900 text-sm focus:ring-2 focus:ring-[#075e54] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!inputMessage.trim() || sending || !isHumanMode}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-[#075e54] text-white hover:bg-[#064e46] disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 transition-colors"
+          >
+            {sending ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Right Panel - Insights */}
