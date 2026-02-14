@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE tenants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_name TEXT NOT NULL,
-    subscription_tier TEXT NOT NULL CHECK (subscription_tier IN ('starter', 'growth', 'scale', 'enterprise')),
+    subscription_tier TEXT NOT NULL CHECK (subscription_tier IN ('free', 'starter', 'growth', 'scale', 'enterprise')),
     subscription_status TEXT NOT NULL DEFAULT 'trial' CHECK (subscription_status IN ('trial', 'active', 'cancelled', 'past_due')),
     stripe_customer_id TEXT,
     twilio_account_sid TEXT,
@@ -27,6 +27,11 @@ CREATE TABLE tenants (
     monthly_conversation_limit INTEGER NOT NULL DEFAULT 500,
     setup_completed BOOLEAN DEFAULT false,
     setup_fee_paid BOOLEAN DEFAULT false,
+    ai_assistant_name TEXT DEFAULT 'Sarah',
+    agent_display_name TEXT,
+    trial_start_date TIMESTAMPTZ,
+    trial_end_date TIMESTAMPTZ,
+    trial_conversation_limit INTEGER DEFAULT 25,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/db/client';
+import { createDefaultFollowUpSequences } from '@/lib/services/followup-templates';
 
 export async function GET(request: NextRequest) {
   try {
@@ -135,12 +136,20 @@ export async function POST(request: NextRequest) {
       switch (step) {
         case 0: // Business Profile
           if (data.company_name) updates.company_name = data.company_name;
-          if (data.business_type) updates.business_type = data.business_type;
+          if (data.business_type) {
+            updates.business_type = data.business_type;
+            const industryMap: Record<string, string> = {
+              'real_estate': 'real-estate', 'automotive': 'automotive',
+              'healthcare': 'medical', 'home_services': 'home-services',
+            };
+            updates.industry = industryMap[data.business_type] || 'other';
+          }
           if (data.business_description) updates.business_description = data.business_description;
           if (data.target_audience) updates.target_audience = data.target_audience;
           if (data.products_services) updates.products_services = data.products_services;
           if (data.business_hours) updates.business_hours = data.business_hours;
           if (data.timezone) updates.timezone = data.timezone;
+          if (data.agent_display_name) updates.agent_display_name = data.agent_display_name;
           break;
 
         case 1: // Twilio Setup
@@ -155,6 +164,7 @@ export async function POST(request: NextRequest) {
           if (data.ai_greeting) updates.ai_greeting = data.ai_greeting;
           if (data.ai_fallback_message) updates.ai_fallback_message = data.ai_fallback_message;
           if (data.qualification_questions) updates.qualification_questions = data.qualification_questions;
+          if (data.ai_assistant_name) updates.ai_assistant_name = data.ai_assistant_name;
           break;
 
         case 3: // Calendar Setup
@@ -177,6 +187,11 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('[Onboarding API] Update error:', error);
       return NextResponse.json({ error: 'Failed to update onboarding' }, { status: 500 });
+    }
+
+    // Auto-create follow-up sequences when industry is set (Step 0)
+    if (step === 0 && updates.industry) {
+      await createDefaultFollowUpSequences(session.user.tenantId, updates.industry);
     }
 
     // Log onboarding progress

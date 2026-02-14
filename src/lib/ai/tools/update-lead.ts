@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { calculateLeadScore } from './calculate-score';
+import { scheduleFollowUps, cancelFollowUps } from '../../services/followup-scheduler';
 
 interface UpdateLeadParams {
   contactId: string;
@@ -87,6 +88,25 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
     }
 
     console.log(`[Tool: updateLead] Contact updated successfully. New score: ${newScore}`);
+
+    // Handle follow-up scheduling based on temperature change
+    if (updates.temperature) {
+      if (updates.temperature === 'hot' || updates.temperature === 'booked') {
+        await cancelFollowUps(contactId, updates.temperature === 'booked' ? 'converted' : 'hot_lead');
+      } else if (updates.temperature === 'warm' || updates.temperature === 'cold') {
+        // Get active conversation for this contact
+        const { data: conv } = await supabaseAdmin
+          .from('conversations')
+          .select('id')
+          .eq('contact_id', contactId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (conv) {
+          await scheduleFollowUps(existingContact.tenant_id, contactId, conv.id, updates.temperature);
+        }
+      }
+    }
 
     return {
       success: true,

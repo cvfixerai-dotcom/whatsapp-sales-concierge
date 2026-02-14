@@ -73,43 +73,57 @@ const testimonials = [
 
 const pricingPlans = [
   {
-    name: 'Pilot',
-    price: 99,
-    conversations: 100,
+    name: 'Free Trial',
+    price: 0,
+    conversations: 25,
     features: [
-      '100 AI conversations/month',
+      '25 AI conversations',
+      '7-day trial period',
       '24/7 instant responses',
-      'Lead qualification & scoring',
-      'Basic dashboard access',
-      'Email support',
+      'Lead qualification',
+      'Basic dashboard',
     ],
     popular: false,
-    cta: 'Start Testing',
+    cta: 'Start Free',
   },
   {
     name: 'Starter',
-    price: 299,
-    conversations: 500,
+    price: 197,
+    conversations: 200,
     features: [
-      '500 AI conversations/month',
-      'Everything in Pilot',
-      'Appointment booking',
+      '200 AI conversations/month',
+      'Appointment auto-booking',
+      'Lead scoring & qualification',
       'WhatsApp handoff alerts',
       'Full dashboard access',
     ],
-    popular: true,
-    cta: 'Start Free Trial',
+    popular: false,
+    cta: 'Get Started',
   },
   {
     name: 'Growth',
-    price: 799,
-    conversations: 2000,
+    price: 497,
+    conversations: 800,
     features: [
-      '2,000 AI conversations/month',
+      '800 AI conversations/month',
       'Everything in Starter',
+      'Automated follow-up sequences',
       'Bilingual (English + Arabic)',
+      'Priority support',
+    ],
+    popular: true,
+    cta: 'Most Popular',
+  },
+  {
+    name: 'Scale',
+    price: 997,
+    conversations: 2500,
+    features: [
+      '2,500 AI conversations/month',
+      'Everything in Growth',
       'Multi-channel handoff',
-      'Priority support (2hr)',
+      'Appointment reminders',
+      'Dedicated account manager',
     ],
     popular: false,
     cta: 'Contact Sales',
@@ -127,7 +141,7 @@ const faqs = [
   },
   {
     question: 'Do I need technical skills to set this up?',
-    answer: 'Not at all. Our guided setup takes 15 minutes. We also offer assisted setup ($99) where we configure everything for you.',
+    answer: 'Not at all. Our guided setup takes 15 minutes. We also offer free assisted setup on a discovery call where we configure everything for you.',
   },
   {
     question: 'Can clients tell they\'re talking to an AI?',
@@ -174,12 +188,12 @@ export default function RealEstateLandingPage() {
               <a href="#pricing" className="text-gray-600 hover:text-gray-900">Pricing</a>
               <a href="#faq" className="text-gray-600 hover:text-gray-900">FAQ</a>
               <Link href="/auth/login" className="text-gray-600 hover:text-gray-900">Login</Link>
-              <Link
-                href="/auth/signup"
+              <a
+                href="#discovery"
                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
               >
-                Start Free Trial
-              </Link>
+                Book Discovery Call
+              </a>
             </div>
           </div>
         </div>
@@ -239,7 +253,7 @@ export default function RealEstateLandingPage() {
                       <Building2 className="h-6 w-6 text-emerald-700" />
                     </div>
                     <div>
-                      <p className="text-white font-semibold">Prime Properties</p>
+                      <p className="text-white font-semibold">Demo Miracle</p>
                       <p className="text-emerald-200 text-sm">Online • AI Assistant</p>
                     </div>
                   </div>
@@ -304,6 +318,35 @@ export default function RealEstateLandingPage() {
         </div>
       </section>
 
+      {/* Before vs After */}
+      <section className="py-20 px-4">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 text-center mb-12">Without AI vs With AI</h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-8">
+              <h3 className="text-xl font-bold text-red-700 mb-6">Without SalesConcierge</h3>
+              <ul className="space-y-4 text-gray-700">
+                <li className="flex items-start gap-3"><span className="text-red-500 mt-1">&#10005;</span>Leads message at 2 AM with no reply until morning</li>
+                <li className="flex items-start gap-3"><span className="text-red-500 mt-1">&#10005;</span>67% of leads go cold before you respond</li>
+                <li className="flex items-start gap-3"><span className="text-red-500 mt-1">&#10005;</span>Hours wasted qualifying tire-kickers</li>
+                <li className="flex items-start gap-3"><span className="text-red-500 mt-1">&#10005;</span>Forgot to follow up? Deal is gone</li>
+                <li className="flex items-start gap-3"><span className="text-red-500 mt-1">&#10005;</span>Showing properties to unqualified buyers</li>
+              </ul>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8">
+              <h3 className="text-xl font-bold text-emerald-700 mb-6">With SalesConcierge</h3>
+              <ul className="space-y-4 text-gray-700">
+                <li className="flex items-start gap-3"><span className="text-emerald-500 mt-1">&#10003;</span>AI responds in 4 seconds, 24/7/365</li>
+                <li className="flex items-start gap-3"><span className="text-emerald-500 mt-1">&#10003;</span>Every lead qualified and scored automatically</li>
+                <li className="flex items-start gap-3"><span className="text-emerald-500 mt-1">&#10003;</span>Only hot leads reach your phone</li>
+                <li className="flex items-start gap-3"><span className="text-emerald-500 mt-1">&#10003;</span>Automated follow-ups at 3, 7, and 21 days</li>
+                <li className="flex items-start gap-3"><span className="text-emerald-500 mt-1">&#10003;</span>Viewings auto-booked on your calendar</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section id="features" className="py-20 px-4">
         <div className="max-w-7xl mx-auto">
@@ -340,7 +383,7 @@ export default function RealEstateLandingPage() {
             Ask about properties, pricing, or request a viewing.
           </p>
           <a
-            href="https://wa.me/14155238886?text=Hi%2C%20I%27m%20interested%20in%20your%203-bedroom%20apartment"
+            href="https://wa.me/14099083940?text=Hi%2C%20I%20want%20to%20see%20how%20the%20AI%20works"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 bg-green-500 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-green-600 transition-colors"
@@ -399,7 +442,7 @@ export default function RealEstateLandingPage() {
               Start free, upgrade when you're ready. No hidden fees.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
             {pricingPlans.map((plan, index) => (
               <div
                 key={index}
@@ -428,16 +471,16 @@ export default function RealEstateLandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href="/auth/signup"
+                <a
+                  href="#discovery"
                   className={`block text-center py-3 rounded-xl font-semibold transition-colors ${
                     plan.popular
                       ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  Start Free Trial
-                </Link>
+                  {plan.cta}
+                </a>
               </div>
             ))}
           </div>
@@ -480,31 +523,29 @@ export default function RealEstateLandingPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 bg-emerald-600">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Ready to Book More Viewings?
-          </h2>
-          <p className="text-xl text-emerald-100 mb-8">
-            Join 500+ real estate professionals using AI to close more deals.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/auth/signup"
-              className="inline-flex items-center justify-center gap-2 bg-white text-emerald-600 px-8 py-4 rounded-xl text-lg font-semibold hover:bg-emerald-50 transition-colors"
-            >
-              Start 7-Day Free Trial
-              <ArrowRight className="h-5 w-5" />
-            </Link>
-            <a
-              href="#demo"
-              className="inline-flex items-center justify-center gap-2 bg-emerald-700 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-emerald-800 transition-colors"
-            >
-              Try Demo First
-              <MessageCircle className="h-5 w-5" />
-            </a>
+      {/* Discovery Call Form */}
+      <section id="discovery" className="py-20 px-4 bg-emerald-600">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Book a Free Discovery Call</h2>
+            <p className="text-xl text-emerald-100">See how AI can transform your lead response. We set everything up in 15 minutes.</p>
           </div>
+          {formSubmitted ? (
+            <div className="bg-white rounded-2xl p-8 text-center">
+              <CheckCircle className="h-16 w-16 text-emerald-500 mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">We will be in touch!</h3>
+              <p className="text-gray-600">Check your WhatsApp for a message from our AI assistant.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 space-y-4">
+              <input type="text" placeholder="Your Name" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <input type="email" placeholder="Email Address" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <input type="tel" placeholder="WhatsApp Number" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <input type="text" placeholder="Agency / Company Name" value={formData.agency} onChange={e => setFormData({...formData, agency: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <button type="submit" className="w-full bg-emerald-600 text-white py-4 rounded-xl text-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">Book Discovery Call <ArrowRight className="h-5 w-5" /></button>
+              <p className="text-gray-500 text-sm text-center">No commitment. 15-minute call. We show you exactly how it works.</p>
+            </form>
+          )}
         </div>
       </section>
 

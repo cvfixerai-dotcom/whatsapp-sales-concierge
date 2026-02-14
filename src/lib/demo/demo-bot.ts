@@ -202,7 +202,7 @@ This is one of our premium listings. Would you like to schedule a viewing? 📅`
   }
   
   // Generic property inquiry
-  return `Hi! 👋 Thanks for reaching out to Prime Properties!
+  return `Hi! 👋 Thanks for reaching out to Demo Miracle!
 
 We have several properties available. Here are some highlights:
 

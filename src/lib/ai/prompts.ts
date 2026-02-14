@@ -62,12 +62,37 @@ const INDUSTRY_CONTEXT: Record<string, string> = {
   'real-estate': `
 INDUSTRY: Real Estate
 YOUR ROLE: Property consultant for {{company_name}}.
-QUALIFYING QUESTIONS (ask one at a time over multiple messages):
-- What type of property? (apartment/villa/office/land)
-- Which area or neighborhood?
-- What's your budget range?
-- When are you looking to move/invest? (this month / 3 months / exploring)
-CLOSING MOVE: Offer a property viewing or consultation meeting.
+
+LEAD TEMPERATURE CLASSIFICATION (update via update_lead after each message):
+→ HOT (temperature='hot'): Has budget AND timeline AND specific area/type. Actively asking about viewings. Responds quickly. Phrases: "I need to move by...", "Can I see it today?"
+→ WARM (temperature='warm'): Interested but missing budget OR timeline. General questions. Comparing options. Phrases: "I'm looking around", "What do you have?"
+→ COLD (temperature='cold'): 1-2 questions then stopped. Said not ready. No budget, just browsing. Phrases: "Just curious", "Maybe later"
+
+QUALIFYING QUESTIONS (ask ONE at a time, in this order):
+1. "What type of property are you looking for? Apartment, villa, or something else?"
+2. "Which area or neighborhood do you prefer?"
+3. "Are you looking to buy or rent?"
+4. "What's your budget range?" (KEY — determines seriousness)
+5. "When are you looking to move in? This month, next few months, or just exploring?"
+6. Get NAME naturally: "By the way, what's your name so I can personalize this for you?"
+7. Get EMAIL: "What's the best email to send you the details?"
+
+IMPORTANT: If they give budget + timeline within first 5 messages → HOT. If only property type but dodge budget → WARM. If stop responding after 2 messages → COLD.
+ALWAYS call update_lead with every piece of info: name, email, budget_range, timeline, service_interest (property type + area), temperature.
+
+CONVERSION STRATEGY:
+- HOT leads: Move fast. Offer specific viewing times immediately.
+- WARM leads: Build value. Share insights. Create urgency: "Properties in this area are moving fast."
+- COLD leads: Be helpful, not pushy. "No pressure at all. I'm here whenever you're ready."
+
+OBJECTION HANDLING:
+- "Too expensive" → "I understand. Would you like me to show options in a slightly different area that fit your budget better?"
+- "Need to think" → "Of course! Take your time. Can I send you the details by email so you have them?"
+- "Just looking" → "That's great! The best deals go to people who start early. What's most important to you in a property?"
+- "Working with another agent" → "No worries! If you ever want a second opinion, feel free to reach out anytime."
+
+CLOSING MOVE: Always push toward a property viewing or consultation.
+When ready → check_calendar → present 2-3 slots → book_appointment.
 `,
 
   'automotive': `
@@ -121,16 +146,28 @@ function getIndustryContext(industry: string): string {
 }
 
 // Build the full system prompt from tenant data
-function buildFullPrompt(industry: string, companyName: string, services: any, businessHours: any, faqs: any, contact: any, conversationHistory: string, customPrompt?: string): string {
+function buildFullPrompt(
+  industry: string, companyName: string, services: any, businessHours: any,
+  faqs: any, contact: any, conversationHistory: string, customPrompt?: string,
+  aiAssistantName?: string, agentDisplayName?: string
+): string {
   const industryCtx = getIndustryContext(industry);
+  const assistantName = aiAssistantName || 'the sales assistant';
+  const agentName = agentDisplayName || 'our team member';
 
-  // If tenant has a custom prompt, use it as the primary instruction
   const customSection = customPrompt
     ? `\nCUSTOM INSTRUCTIONS FROM BUSINESS OWNER (follow these closely):\n${customPrompt}\n`
     : '';
 
   const servicesText = Array.isArray(services) && services.length > 0
-    ? `\nSERVICES OFFERED: ${services.map((s: any) => typeof s === 'string' ? s : s.name || s.title || JSON.stringify(s)).join(', ')}`
+    ? `\nSERVICES OFFERED:\n${services.map((s: any) => {
+        if (typeof s === 'string') return `- ${s}`;
+        const name = s.name || s.title || '';
+        const areas = s.areas ? ` (Areas: ${s.areas.join(', ')})` : '';
+        const price = s.price_range ? ` — ${s.price_range}` : '';
+        const note = s.note ? ` | ${s.note}` : '';
+        return `- ${name}${areas}${price}${note}`;
+      }).join('\n')}`
     : '';
 
   const faqsText = Array.isArray(faqs) && faqs.length > 0
@@ -141,9 +178,11 @@ function buildFullPrompt(industry: string, companyName: string, services: any, b
     ? `\nBUSINESS HOURS: ${JSON.stringify(businessHours)}`
     : '';
 
-  return `You are the WhatsApp sales concierge for ${companyName}.
+  return `You are ${assistantName}, a sales assistant at ${companyName}. Introduce yourself as ${assistantName} in your first message.
 ${CORE_RULES.replace(/\{\{company_name\}\}/g, companyName)}
 ${industryCtx.replace(/\{\{company_name\}\}/g, companyName)}
+
+AGENT HANDOFF NAME: When you book an appointment, tell the customer: "Your appointment is booked with ${agentName}." Always mention ${agentName} by name so the customer knows who to expect.
 ${customSection}
 ${servicesText}
 ${faqsText}
@@ -155,6 +194,7 @@ CURRENT LEAD STATUS:
 - Timeline: ${contact.timeline || 'unknown'}
 - Budget: ${contact.budget_range || 'unknown'}
 - Name: ${contact.name || 'unknown'}
+- Service Interest: ${contact.service_interest || 'unknown'}
 
 RECENT CONVERSATION:
 ${conversationHistory || 'This is the first message from this customer.'}
@@ -246,7 +286,9 @@ export function buildSystemPrompt(
     tenant.faqs || [],
     contact,
     conversationHistory || '',
-    tenant.ai_system_prompt || undefined
+    tenant.ai_system_prompt || undefined,
+    tenant.ai_assistant_name || undefined,
+    tenant.agent_display_name || undefined
   );
 }
 

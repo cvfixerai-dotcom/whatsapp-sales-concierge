@@ -11,7 +11,7 @@ import { twilioService } from '@/lib/services/twilio';
 // Demo Twilio credentials (use your demo account)
 const DEMO_TWILIO_SID = process.env.DEMO_TWILIO_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID;
 const DEMO_TWILIO_TOKEN = process.env.DEMO_TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
-const DEMO_WHATSAPP_NUMBER = process.env.DEMO_WHATSAPP_NUMBER || 'whatsapp:+15419098284';
+const DEMO_WHATSAPP_NUMBER = process.env.DEMO_WHATSAPP_NUMBER || 'whatsapp:+14099083940';
 
 /**
  * POST /api/webhook/demo

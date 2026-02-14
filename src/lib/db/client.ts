@@ -77,7 +77,7 @@ export type Json =
 export interface Tenant {
   id: string;
   company_name: string;
-  subscription_tier: 'starter' | 'growth' | 'scale' | 'enterprise';
+  subscription_tier: 'free' | 'starter' | 'growth' | 'scale' | 'enterprise';
   subscription_status: 'trial' | 'active' | 'cancelled' | 'past_due';
   stripe_customer_id: string | null;
   twilio_account_sid: string | null;
@@ -95,6 +95,11 @@ export interface Tenant {
   monthly_conversation_limit: number;
   setup_completed: boolean;
   setup_fee_paid: boolean;
+  ai_assistant_name: string | null;
+  agent_display_name: string | null;
+  trial_start_date: string | null;
+  trial_end_date: string | null;
+  trial_conversation_limit: number | null;
   created_at: string;
   updated_at: string;
 }

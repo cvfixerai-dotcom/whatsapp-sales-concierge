@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     const messageSid = webhookData.MessageSid;
     const fromNumber = webhookData.From;   // e.g. whatsapp:+1234567890
-    const toNumber = webhookData.To;       // e.g. whatsapp:+15419098284
+    const toNumber = webhookData.To;       // e.g. whatsapp:+14099083940
     const messageBody = webhookData.Body || '';
 
     log(`Received: from=${fromNumber} to=${toNumber} body="${messageBody.substring(0, 50)}" sid=${messageSid}`);
@@ -38,6 +38,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'No tenant', logs }, { status: 200 });
     }
     log(`Tenant found: ${tenantId}`);
+
+    // 3b. Trial & limit check
+    const limitOk = await checkTenantLimits(tenantId, fromNumber, log);
+    if (!limitOk) {
+      return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', { status: 200, headers: { 'Content-Type': 'text/xml' } });
+    }
 
     // 4. Idempotency check — use MessageSid as TEXT (not UUID)
     const { data: existing } = await supabaseAdmin
@@ -255,4 +261,34 @@ export async function GET() {
       subscription: t.subscription_status,
     })),
   });
+}
+
+async function checkTenantLimits(tenantId: string, fromNumber: string, log: (msg: string) => void): Promise<boolean> {
+  try {
+    const { data: t } = await supabaseAdmin.from('tenants').select('subscription_tier, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit').eq('id', tenantId).single();
+    if (!t) return true;
+
+    if (t.subscription_status === 'trial' && t.trial_end_date && new Date(t.trial_end_date) < new Date()) {
+      log('Trial expired');
+      await twilioService.sendWhatsAppMessage(tenantId, fromNumber.replace('whatsapp:', ''), "Thanks for your message! This business is currently updating their system. Please try again later.", { bypassRateLimit: true });
+      return false;
+    }
+
+    const tierLimits: Record<string, number> = { free: 25, starter: 200, growth: 800, scale: 2500 };
+    const limit = t.subscription_status === 'trial' ? (t.trial_conversation_limit || 25) : (t.monthly_conversation_limit || tierLimits[t.subscription_tier] || 200);
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    const { count } = await supabaseAdmin.from('conversations').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', monthStart.toISOString());
+    const usage = count || 0;
+
+    if (usage >= limit) {
+      log(`Limit reached: ${usage}/${limit}`);
+      await twilioService.sendWhatsAppMessage(tenantId, fromNumber.replace('whatsapp:', ''), "Thanks for your message! We're experiencing high demand. Our team will get back to you soon.", { bypassRateLimit: true });
+      return false;
+    }
+    log(`Usage: ${usage}/${limit} (${t.subscription_tier})`);
+    return true;
+  } catch (err) {
+    log(`Limit check error: ${err}`);
+    return true;
+  }
 }
