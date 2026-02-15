@@ -71,7 +71,7 @@ function SettingsPageContent() {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations'>('ai');
 
   // Integrations state
   const [crmWebhookUrl, setCrmWebhookUrl] = useState('');
@@ -458,24 +458,13 @@ function SettingsPageContent() {
                 Settings
               </h1>
               <p className="mt-2 text-gray-600">
-                Configure your calendar integration and handoff notifications
+                Configure your AI assistant, templates, and notification preferences
               </p>
             </div>
 
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200 sticky top-16 z-20 bg-gray-50 -mx-6 px-6">
           <nav className="flex space-x-8 overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('calendar')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'calendar'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Calendar className="inline h-4 w-4 mr-2" />
-              Calendar Integration
-            </button>
             <button
               onClick={() => setActiveTab('ai')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
@@ -497,17 +486,6 @@ function SettingsPageContent() {
             >
               <MessageSquare className="inline h-4 w-4 mr-2" />
               Templates
-            </button>
-            <button
-              onClick={() => setActiveTab('integrations')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'integrations'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <ExternalLink className="inline h-4 w-4 mr-2" />
-              Integrations
             </button>
             <button
               onClick={() => setActiveTab('handoff')}

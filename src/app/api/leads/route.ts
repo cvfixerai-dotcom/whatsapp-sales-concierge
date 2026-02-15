@@ -54,6 +54,52 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { name, whatsapp_number, email, temperature, timeline, budget_range, service_interest, notes } = body;
+
+    if (!name || !whatsapp_number) {
+      return NextResponse.json({ error: 'Name and WhatsApp number are required' }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('contacts')
+      .insert({
+        tenant_id: session.user.tenantId,
+        name,
+        whatsapp_number,
+        email: email || null,
+        temperature: temperature || 'new',
+        timeline: timeline || null,
+        budget_range: budget_range || null,
+        service_interest: service_interest || null,
+        notes: notes || null,
+        lead_score: 0,
+        qualification_status: 'unqualified',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Leads API] Insert error:', error);
+      return NextResponse.json({ error: 'Failed to create lead' }, { status: 500 });
+    }
+
+    return NextResponse.json({ lead: data }, { status: 201 });
+  } catch (error) {
+    console.error('[Leads API] POST error:', error);
+    return NextResponse.json({ error: 'Failed to create lead' }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

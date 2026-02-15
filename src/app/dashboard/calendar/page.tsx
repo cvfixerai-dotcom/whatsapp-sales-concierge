@@ -140,13 +140,12 @@ export default function CalendarPage() {
           {/* Header with Availability Settings link */}
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
-            <a
-              href="/dashboard/calendar/availability"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Availability Settings
-            </a>
+            <div className="flex items-center gap-3 text-xs text-gray-600">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>Scheduled</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>Completed</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>Cancelled</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span>No-show</span>
+            </div>
           </div>
 
           {/* Stats */}
@@ -194,16 +193,9 @@ export default function CalendarPage() {
               <div className="p-12 text-center">
                 <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No appointments this month</h3>
-                <p className="text-gray-500 mb-4">
-                  Appointments will appear here when the AI books meetings with your leads.
+                <p className="text-gray-500">
+                  Appointments will appear here automatically when the AI books meetings with your leads via WhatsApp.
                 </p>
-                <a
-                  href="/dashboard/settings"
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Configure Calendar
-                </a>
               </div>
             ) : (
               <div className="divide-y divide-gray-200">

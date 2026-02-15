@@ -1,42 +1,40 @@
 // @ts-nocheck
 export const PRICING = {
   tiers: {
-    pilot: {
-      name: 'Pilot',
-      price: 99,
-      conversations: 100,
+    trial: {
+      name: 'Free Trial',
+      price: 0,
+      conversations: 25,
       features: [
-        '100 conversations/month',
+        '25 AI conversations',
         '24/7 AI responses in 4 seconds',
         'Lead qualification & scoring',
         'Basic dashboard access',
-        'Email support (48-hour response)',
-        'Single language (English OR Arabic)'
+        'Email support'
       ],
       ideal_for: 'Businesses testing AI sales automation'
     },
     starter: {
       name: 'Starter',
-      price: 299,
-      conversations: 500,
+      price: 197,
+      conversations: 200,
       features: [
-        '500 conversations/month',
+        '200 AI conversations/month',
         '24/7 AI responses in 4 seconds',
         'Lead qualification & scoring',
-        'Appointment booking (Google Calendar)',
+        'Appointment booking',
         'Full dashboard access',
         'Email support (24-hour response)',
-        'Single language (English OR Arabic)',
         'WhatsApp handoff notifications'
       ],
       ideal_for: 'Small businesses with 1-3 salespeople'
     },
     growth: {
       name: 'Growth',
-      price: 799,
-      conversations: 2000,
+      price: 497,
+      conversations: 800,
       features: [
-        '2,000 conversations/month',
+        '800 AI conversations/month',
         'Everything in Starter',
         'Bilingual support (English + Arabic)',
         'Lead temperature tracking (Hot/Warm/Cold)',
@@ -48,10 +46,10 @@ export const PRICING = {
     },
     scale: {
       name: 'Scale',
-      price: 1499,
-      conversations: 5000,
+      price: 997,
+      conversations: 2500,
       features: [
-        '5,000 conversations/month',
+        '2,500 AI conversations/month',
         'Everything in Growth',
         'Multi-language support (3 languages)',
         'Multi-number support (up to 3 numbers)',
@@ -159,7 +157,7 @@ export function getTierUpgradePath(currentTier: string): {
   priceDifference: number;
   valuePerExtra: number;
 } {
-  const tiers = ['pilot', 'starter', 'growth', 'scale'];
+  const tiers = ['trial', 'starter', 'growth', 'scale'];
   const currentIndex = tiers.indexOf(currentTier);
   
   if (currentIndex >= tiers.length - 1) {

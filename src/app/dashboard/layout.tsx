@@ -27,7 +27,7 @@ const NAV_ITEMS: Array<{ href: string; label: string; icon: any; adminOnly?: boo
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/dashboard/handoffs', label: 'Handoffs', icon: UserPlus },
-  { href: '/dashboard/activity', label: 'Activity Log', icon: FileText },
+
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
   { href: '/dashboard/outreach', label: 'Outreach', icon: Target, adminOnly: true },
@@ -40,7 +40,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/calendar': 'Calendar',
   '/dashboard/analytics': 'Analytics',
   '/dashboard/handoffs': 'Handoff Management',
-  '/dashboard/activity': 'Activity Log',
+
   '/dashboard/billing': 'Billing',
   '/dashboard/settings': 'Settings',
   '/dashboard/outreach': 'Outreach Queue',

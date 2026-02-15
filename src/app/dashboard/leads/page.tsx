@@ -19,6 +19,7 @@ import {
   useReactTable,
   Row,
 } from '@tanstack/react-table';
+import AddLeadModal from '@/components/AddLeadModal';
 import {
   ChevronDown,
   ChevronUp,
@@ -116,6 +117,9 @@ export default function LeadsPage() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [editForm, setEditForm] = useState<Partial<Lead>>({});
   const [notes, setNotes] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', whatsapp_number: '', email: '', temperature: 'new', notes: '' });
+  const [addingLead, setAddingLead] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -188,7 +192,7 @@ export default function LeadsPage() {
       const res = await fetch('/api/leads', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingLead.id, ...editForm, notes }),
+        body: JSON.stringify({ id: editingLead.id, name: editForm.name, email: editForm.email, temperature: editForm.temperature, timeline: editForm.timeline, budget_range: editForm.budget_range, service_interest: editForm.service_interest, notes }),
       });
 
       if (!res.ok) throw new Error('Failed to update');
@@ -219,6 +223,31 @@ export default function LeadsPage() {
     a.href = url;
     a.download = 'leads_export.csv';
     a.click();
+  };
+
+  const handleAddLead = async () => {
+    if (!addForm.name || !addForm.whatsapp_number) {
+      toast.error('Name and WhatsApp number are required');
+      return;
+    }
+    setAddingLead(true);
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addForm),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
+      toast.success('Lead added successfully!');
+      setShowAddModal(false);
+      setAddForm({ name: '', whatsapp_number: '', email: '', temperature: 'new', notes: '' });
+      fetchLeads();
+    } catch (error) {
+      console.error('Error adding lead:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to add lead');
+    } finally {
+      setAddingLead(false);
+    }
   };
 
   const getScoreColor = (score: number) => {
@@ -316,7 +345,7 @@ export default function LeadsPage() {
           >
             <Eye className="w-4 h-4 text-gray-600" />
           </button>
-          <button className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={() => { handleViewLead(row.original); setEditingLead(row.original); }} className="p-1 hover:bg-gray-100 rounded">
             <Edit className="w-4 h-4 text-gray-600" />
           </button>
         </div>
@@ -435,7 +464,7 @@ export default function LeadsPage() {
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-medium text-gray-900">All Leads ({leads.length})</h2>
-                <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <button onClick={() => setShowAddModal(true)} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Lead
                 </button>
@@ -569,7 +598,7 @@ export default function LeadsPage() {
                           type="text"
                           value={editForm.name || ''}
                           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
                         />
                       ) : (
                         <p className="mt-1 text-sm text-gray-900">{selectedLead.name}</p>
@@ -586,7 +615,7 @@ export default function LeadsPage() {
                           type="email"
                           value={editForm.email || ''}
                           onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
                         />
                       ) : (
                         <p className="mt-1 text-sm text-gray-900">{selectedLead.email || '-'}</p>
@@ -610,7 +639,7 @@ export default function LeadsPage() {
                         <select
                           value={editForm.temperature || ''}
                           onChange={(e) => setEditForm({ ...editForm, temperature: e.target.value })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="new">New</option>
                           <option value="warm">Warm</option>
@@ -705,6 +734,8 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+
+      {showAddModal && <AddLeadModal onClose={() => setShowAddModal(false)} onSuccess={fetchLeads} />}
     </div>
   );
 }
