@@ -16,10 +16,11 @@ import {
   Menu,
   X,
   FileText,
+  Target,
 } from 'lucide-react';
 import { useState } from 'react';
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{ href: string; label: string; icon: any; adminOnly?: boolean }> = [
   { href: '/dashboard', label: 'Dashboard', icon: Activity },
   { href: '/dashboard/conversations', label: 'Conversations', icon: MessageSquare },
   { href: '/dashboard/leads', label: 'Leads', icon: Users },
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/activity', label: 'Activity Log', icon: FileText },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+  { href: '/dashboard/outreach', label: 'Outreach', icon: Target, adminOnly: true },
 ];
 
 const PAGE_TITLES: Record<string, string> = {
@@ -41,6 +43,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/activity': 'Activity Log',
   '/dashboard/billing': 'Billing',
   '/dashboard/settings': 'Settings',
+  '/dashboard/outreach': 'Outreach Queue',
 };
 
 export default function DashboardLayout({
@@ -132,7 +135,7 @@ export default function DashboardLayout({
 
           <nav className="mt-5 px-2 flex flex-col h-[calc(100%-3rem)] overflow-y-auto">
             <div className="flex-1">
-              {NAV_ITEMS.map((item) => {
+              {NAV_ITEMS.filter(item => !item.adminOnly || session?.user?.role === 'admin').map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
                 return (
