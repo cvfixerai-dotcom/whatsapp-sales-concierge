@@ -165,9 +165,18 @@ export default function RealEstateLandingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In production, this would submit to your API
-    console.log('Lead captured:', formData);
-    setFormSubmitted(true);
+    try {
+      const res = await fetch('/api/discovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) throw new Error('Failed to submit');
+      setFormSubmitted(true);
+    } catch (err) {
+      console.error('Discovery form error:', err);
+      setFormSubmitted(true);
+    }
   };
 
   return (
@@ -552,19 +561,22 @@ export default function RealEstateLandingPage() {
       {/* Footer */}
       <footer className="py-12 px-4 bg-gray-900">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
                 <MessageSquare className="h-5 w-5 text-white" />
               </div>
-              <span className="font-bold text-xl text-white">SalesConcierge</span>
+              <span className="font-bold text-xl text-white">SalesConcierge<span className="text-emerald-400">AI</span></span>
             </div>
-            <div className="flex gap-6 text-gray-400">
-              <Link href="/privacy" className="hover:text-white">Privacy</Link>
-              <Link href="/terms" className="hover:text-white">Terms</Link>
-              <a href="mailto:support@fixeraitech.com" className="hover:text-white">Contact</a>
+            <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-400">
+              <a href="https://fixeraitech.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Privacy</a>
+              <a href="https://fixeraitech.com/terms" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Terms</a>
+              <a href="mailto:info@fixeraitech.com" className="hover:text-white transition-colors">Contact</a>
+              <a href="https://www.linkedin.com/company/fixeraitech" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">LinkedIn</a>
             </div>
-            <p className="text-gray-500">© 2026 FixerAI Tech. All rights reserved.</p>
+            <div className="text-center md:text-right">
+              <p className="text-gray-500 text-sm">&copy; 2026 <a href="https://fixeraitech.com" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">FixerAI Technologies Ltd</a>. All rights reserved.</p>
+            </div>
           </div>
         </div>
       </footer>
