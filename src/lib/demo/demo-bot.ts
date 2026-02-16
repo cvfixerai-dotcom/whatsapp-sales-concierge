@@ -15,6 +15,7 @@ export interface DemoConversation {
   created_at: string;
   last_message_at: string;
   messages: DemoMessage[];
+  flow: 'demo' | 'discovery';
 }
 
 export interface DemoMessage {
@@ -75,6 +76,7 @@ export function getOrCreateDemoConversation(phoneNumber: string): DemoConversati
       created_at: new Date().toISOString(),
       last_message_at: new Date().toISOString(),
       messages: [],
+      flow: 'demo',
     });
   }
   return demoConversations.get(phoneNumber)!;
@@ -143,10 +145,20 @@ Have a great day!`;
     }
   }
 
-  // Generate contextual response based on message count
-  let response: string;
-  
+  // Detect discovery call intent on first message
   if (conversation.message_count === 1) {
+    const lowerMsg = message.toLowerCase();
+    if (lowerMsg.includes('discovery call') || lowerMsg.includes('book a call') || lowerMsg.includes('booked a discovery') || lowerMsg.includes('how the ai assistant works for my business') || lowerMsg.includes('for my business')) {
+      conversation.flow = 'discovery';
+    }
+  }
+
+  // Generate contextual response based on flow and message count
+  let response: string;
+
+  if (conversation.flow === 'discovery') {
+    response = generateDiscoveryResponse(conversation, message);
+  } else if (conversation.message_count === 1) {
     response = generateFirstResponse(message);
   } else if (conversation.message_count === 2) {
     response = generateSecondResponse(message);
@@ -338,6 +350,99 @@ Reply **YES** and I'll have our team set you up, or visit:
 🔗 fixeraitech.com/realestate
 
 What do you think? 🚀`;
+}
+
+/**
+ * Generate discovery call flow responses
+ */
+function generateDiscoveryResponse(conversation: DemoConversation, message: string): string {
+  const count = conversation.message_count;
+  const lowerMsg = message.toLowerCase();
+
+  // Extract name from first message if present
+  const nameMatch = message.match(/My name is ([^.]+?)(?:\s+from|\.|$)/i);
+  const agencyMatch = message.match(/from ([^.]+?)(?:\.|I'd|$)/i);
+
+  if (count === 1) {
+    const greeting = nameMatch ? `Hi ${nameMatch[1].trim()}! ` : 'Hi there! ';
+    const agencyNote = agencyMatch ? `Great to hear from ${agencyMatch[1].trim()}. ` : '';
+    return `${greeting}👋 Thanks for booking a discovery call!
+
+${agencyNote}I'm the AI assistant that could be working for your business 24/7. Let me show you what I can do while we get your call set up.
+
+Quick question — how many WhatsApp property inquiries does your team get per week on average?
+
+1️⃣ Less than 20
+2️⃣ 20-50
+3️⃣ 50-100
+4️⃣ More than 100`;
+  }
+
+  if (count === 2) {
+    return `Got it! That's exactly the kind of volume where our AI makes the biggest impact.
+
+And how quickly does your team usually respond to new WhatsApp inquiries?
+
+⚡ Under 5 minutes
+⏱️ 5-30 minutes
+🕐 1-4 hours
+😴 Next business day`;
+  }
+
+  if (count === 3) {
+    return `Thanks for sharing! Here's what we typically see with teams like yours:
+
+📊 **Your Potential Results:**
+• Instant response time (4 seconds vs hours)
+• 3x more viewings booked automatically
+• Zero missed leads — even at 2 AM
+• Your agents focus only on hot, qualified leads
+
+Let's get your discovery call booked! 📅
+
+What works better for you?
+
+1️⃣ Tomorrow morning (10 AM GST)
+2️⃣ Tomorrow afternoon (2 PM GST)
+3️⃣ Day after tomorrow (10 AM GST)
+4️⃣ Suggest another time`;
+  }
+
+  if (count === 4) {
+    let timeSlot = 'your preferred time';
+    if (lowerMsg.includes('1') || lowerMsg.includes('morning') || lowerMsg.includes('10')) {
+      timeSlot = 'tomorrow at 10 AM GST';
+    } else if (lowerMsg.includes('2') || lowerMsg.includes('afternoon') || lowerMsg.includes('2 pm')) {
+      timeSlot = 'tomorrow at 2 PM GST';
+    } else if (lowerMsg.includes('3') || lowerMsg.includes('day after')) {
+      timeSlot = 'day after tomorrow at 10 AM GST';
+    }
+
+    conversation.lead_captured = true;
+    conversation.interested = true;
+    saveDemoLead(conversation.phone_number, conversation);
+
+    return `Excellent! ✅ **Discovery Call Confirmed!**
+
+━━━━━━━━━━━━━━━━━━
+📅 ${timeSlot}
+⏱️ 15 minutes
+👤 With our team
+📍 Via this WhatsApp chat or Zoom
+━━━━━━━━━━━━━━━━━━
+
+During the call we'll:
+✅ Show you a live demo customized to your properties
+✅ Set up your AI assistant in 15 minutes
+✅ Answer any questions
+
+In the meantime, feel free to test the property demo — just ask about any property in Dubai! 🏠
+
+See you soon! 🚀`;
+  }
+
+  // After booking, switch to property demo mode for exploration
+  return generateFirstResponse(message);
 }
 
 /**
