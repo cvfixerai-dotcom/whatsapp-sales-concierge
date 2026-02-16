@@ -12,6 +12,8 @@ interface UpdateLeadParams {
     timeline?: string;
     budget_range?: string;
     service_interest?: string;
+    needs_human?: boolean;
+    needs_followup?: boolean;
     metadata?: Record<string, any>;
   };
 }

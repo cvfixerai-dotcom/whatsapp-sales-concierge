@@ -189,12 +189,14 @@ ${faqsText}
 ${hoursText}
 
 CURRENT LEAD STATUS:
+- Name: ${contact.name || 'unknown'}
+- Email: ${contact.email || 'not collected yet'}
 - Temperature: ${contact.temperature || 'new'}
 - Score: ${contact.lead_score || 0}/100
 - Timeline: ${contact.timeline || 'unknown'}
 - Budget: ${contact.budget_range || 'unknown'}
-- Name: ${contact.name || 'unknown'}
 - Service Interest: ${contact.service_interest || 'unknown'}
+- Last Contact: ${contact.last_message_at || contact.updated_at || 'unknown'}
 
 RECENT CONVERSATION:
 ${conversationHistory || 'This is the first message from this customer.'}
