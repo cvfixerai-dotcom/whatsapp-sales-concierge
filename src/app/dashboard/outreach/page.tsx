@@ -49,7 +49,16 @@ const TOGGLE_FIELDS = [
   { key: 'client', label: 'Client' },
 ] as const;
 
-const OUTREACH_MESSAGE = `Hi — I help Dubai real estate agents automatically respond to WhatsApp inquiries, qualify buyers, and book viewings using AI. Would you be open to a quick demo?`;
+const OUTREACH_MESSAGE = `Hi,  quick question.
+
+Do you ever miss WhatsApp property inquiries when you're busy or after hours?
+
+We built a WhatsApp AI assistant for Dubai real estate teams that replies instantly, qualifies buyers, and books viewings automatically.
+
+You can try the live demo here:
+https://concierge.fixeraitech.com/realestate
+
+Curious what you think.`;
 
 type BooleanFilter = { [key: string]: 'true' | 'false' | '' };
 
@@ -361,13 +370,26 @@ export default function OutreachPage() {
                       {lead.phone || '-'}
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={lead.linkedin_url || ''}
-                        onChange={e => handleInlineEdit(lead.id, 'linkedin_url', e.target.value)}
-                        placeholder="—"
-                        className="w-full text-sm border-0 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:ring-0 px-0 py-0.5 text-blue-700 bg-transparent placeholder-gray-300 min-w-[120px]"
-                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={lead.linkedin_url || ''}
+                          onChange={e => handleInlineEdit(lead.id, 'linkedin_url', e.target.value)}
+                          placeholder="Paste LinkedIn URL..."
+                          className="flex-1 text-sm border-0 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:ring-0 px-0 py-0.5 text-blue-700 bg-transparent placeholder-gray-300 min-w-[120px]"
+                        />
+                        {lead.linkedin_url && (
+                          <a
+                            href={lead.linkedin_url.startsWith('http') ? lead.linkedin_url : `https://${lead.linkedin_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-shrink-0 p-0.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                            title="Open LinkedIn URL"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <input
