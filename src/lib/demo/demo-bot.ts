@@ -37,28 +37,28 @@ export const DEMO_CONFIG = {
 // Demo property data for real estate demo
 const DEMO_PROPERTIES = [
   {
-    name: '3-Bedroom Apartment in Lekki Phase 1',
-    price: '₦3.5M/year',
-    type: 'Apartment',
+    name: '3-Bed Villa in Dubai Marina',
+    price: 'AED 3.2M',
+    type: 'Villa',
     bedrooms: 3,
-    features: ['24/7 power & water', 'Swimming pool', 'Gym access', 'Security'],
-    location: '15 Admiralty Way, Lekki Phase 1',
+    features: ['Direct sea view', 'Private balcony', 'Swimming pool & gym', '24/7 security & concierge'],
+    location: 'Marina Walk, Dubai Marina',
   },
   {
-    name: '4-Bedroom Duplex in Ikoyi',
-    price: '₦8M/year',
-    type: 'Duplex',
+    name: '4-Bed Penthouse in Palm Jumeirah',
+    price: 'AED 8.5M',
+    type: 'Penthouse',
     bedrooms: 4,
-    features: ['Smart home', 'Private garden', 'BQ', '2 parking spaces'],
-    location: 'Banana Island Road, Ikoyi',
+    features: ['Full sea view', 'Private pool', 'Smart home system', '3 parking spaces'],
+    location: 'Shoreline Apartments, Palm Jumeirah',
   },
   {
-    name: '2-Bedroom Flat in Victoria Island',
-    price: '₦2.5M/year',
-    type: 'Flat',
+    name: '2-Bed Apartment in Downtown Dubai',
+    price: 'AED 1.8M',
+    type: 'Apartment',
     bedrooms: 2,
-    features: ['Sea view', 'Fitted kitchen', 'CCTV', 'Generator'],
-    location: 'Adeola Odeku Street, VI',
+    features: ['Burj Khalifa view', 'Fitted kitchen', 'Gym & pool', 'Walking distance to Dubai Mall'],
+    location: 'Boulevard Point, Downtown Dubai',
   },
 ];
 
@@ -182,27 +182,27 @@ function generateFirstResponse(message: string): string {
   const lowerMessage = message.toLowerCase();
   
   // Check if asking about specific property
-  if (lowerMessage.includes('3-bed') || lowerMessage.includes('3 bed') || lowerMessage.includes('lekki')) {
+  if (lowerMessage.includes('3-bed') || lowerMessage.includes('3 bed') || lowerMessage.includes('marina') || lowerMessage.includes('villa')) {
     return `Hi! 👋 Yes, the ${property.name} is available!
 
-It's ${property.price}, fully serviced with:
+It's ${property.price}, 2,800 sq ft with:
 ✓ ${property.features.join('\n✓ ')}
 
 Would you like to schedule a viewing? I have slots available tomorrow at 10 AM or 2 PM. 📅`;
   }
   
-  if (lowerMessage.includes('4-bed') || lowerMessage.includes('4 bed') || lowerMessage.includes('ikoyi') || lowerMessage.includes('duplex')) {
-    const duplex = DEMO_PROPERTIES[1];
-    return `Hi! 👋 Yes, the ${duplex.name} is available!
+  if (lowerMessage.includes('4-bed') || lowerMessage.includes('4 bed') || lowerMessage.includes('palm') || lowerMessage.includes('penthouse')) {
+    const penthouse = DEMO_PROPERTIES[1];
+    return `Hi! 👋 Yes, the ${penthouse.name} is available!
 
-It's ${duplex.price}, featuring:
-✓ ${duplex.features.join('\n✓ ')}
+It's ${penthouse.price}, featuring:
+✓ ${penthouse.features.join('\n✓ ')}
 
 This is one of our premium listings. Would you like to schedule a viewing? 📅`;
   }
   
   // Generic property inquiry
-  return `Hi! 👋 Thanks for reaching out to Demo Miracle!
+  return `Hi! 👋 Thanks for reaching out to Dubai Properties AI!
 
 We have several properties available. Here are some highlights:
 
@@ -220,12 +220,12 @@ function generateSecondResponse(message: string): string {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('budget') || lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
-    return `Great question! Our properties range from ₦2.5M to ₦8M per year.
+    return `Great question! Our properties range from AED 1.8M to AED 8.5M.
 
 To help you find the best fit:
 • What's your preferred budget range?
 • How many bedrooms do you need?
-• Any preferred locations?
+• Any preferred areas? (Marina, Downtown, Palm, JBR)
 
 This helps me show you only relevant options! 🎯`;
   }
@@ -242,7 +242,7 @@ Which time works best for you? I'll confirm immediately and send you the address
   
   return `Thanks for the details! 
 
-Based on what you've shared, I think you'd love our properties in Lekki and Victoria Island.
+Based on what you've shared, I think you'd love our properties in Dubai Marina and Downtown.
 
 Quick questions to narrow it down:
 1. Are you looking to rent or buy?
@@ -260,14 +260,14 @@ function generateThirdResponse(message: string): string {
   if (lowerMessage.includes('rent')) {
     return `Perfect, rental it is! 🏠
 
-For rentals, we typically require:
-• Valid ID
+For rentals in Dubai, we typically require:
+• Valid Emirates ID or passport
 • Proof of income/employment
-• 1 year rent + 1 year security deposit
+• 1-4 cheques (depending on the landlord)
 
 Don't worry about paperwork now - let's first find you the perfect place!
 
-Would you like to see the 3-bedroom in Lekki tomorrow? It's our most popular listing and gets a lot of interest. 🔥`;
+Would you like to see the 3-bed villa in Dubai Marina tomorrow? It's our most popular listing and gets a lot of interest. 🔥`;
   }
   
   if (lowerMessage.includes('2 pm') || lowerMessage.includes('2pm') || lowerMessage.includes('afternoon')) {
@@ -275,7 +275,7 @@ Would you like to see the 3-bedroom in Lekki tomorrow? It's our most popular lis
 
 I've booked your viewing for **tomorrow at 2 PM**.
 
-📍 Address: 15 Admiralty Way, Lekki Phase 1
+📍 Address: Marina Walk, Dubai Marina
 👤 Our agent Sarah will meet you there
 📱 She'll call 30 mins before to confirm
 
@@ -287,8 +287,8 @@ Is there anything specific you'd like to know about the property before then? �
   return `Great! Let me book that for you.
 
 Just to confirm:
-📍 Property: 3-Bedroom Apartment, Lekki Phase 1
-💰 Price: ₦3.5M/year
+📍 Property: 3-Bed Villa, Dubai Marina
+💰 Price: AED 3.2M
 📅 Viewing: Tomorrow
 
 What time works best? Morning (10 AM) or afternoon (2 PM)? ⏰`;
@@ -302,8 +302,8 @@ function generateFourthResponse(message: string): string {
 
 📋 **Viewing Confirmed**
 ━━━━━━━━━━━━━━━━━━
-🏠 3-Bedroom Apartment
-📍 15 Admiralty Way, Lekki Phase 1
+🏠 3-Bed Villa, Dubai Marina
+📍 Marina Walk, Dubai Marina
 📅 Tomorrow at 2:00 PM
 👤 Agent: Sarah (will call 30 mins before)
 ━━━━━━━━━━━━━━━━━━

@@ -53,22 +53,31 @@ const stats = [
 const testimonials = [
   {
     name: 'Sarah M.',
-    role: 'Real Estate Agent, Lagos',
+    role: 'Real Estate Agent, Dubai Marina',
     content: 'I booked 3 viewings while I was showing another property. The AI handled everything perfectly.',
     rating: 5,
   },
   {
     name: 'Ahmed K.',
-    role: 'Property Developer, Dubai',
+    role: 'Property Developer, Business Bay',
     content: 'Our response time went from 4 hours to 4 seconds. Lead conversion doubled in the first month.',
     rating: 5,
   },
   {
-    name: 'Grace O.',
-    role: 'Agency Owner, Nairobi',
+    name: 'Fatima R.',
+    role: 'Agency Owner, Palm Jumeirah',
     content: 'Finally, I can sleep without worrying about missing leads. The AI qualifies them better than my junior agents.',
     rating: 5,
   },
+];
+
+const sharedFeatures = [
+  '24/7 instant AI responses',
+  'Lead qualification & scoring',
+  'Appointment auto-booking',
+  'WhatsApp handoff alerts',
+  'Full dashboard & analytics',
+  'Bilingual (English + Arabic)',
 ];
 
 const pricingPlans = [
@@ -76,13 +85,7 @@ const pricingPlans = [
     name: 'Free Trial',
     price: 0,
     conversations: 25,
-    features: [
-      '25 AI conversations',
-      '7-day trial period',
-      '24/7 instant responses',
-      'Lead qualification',
-      'Basic dashboard',
-    ],
+    features: ['25 AI conversations', ...sharedFeatures],
     popular: false,
     cta: 'Start Free',
   },
@@ -90,13 +93,7 @@ const pricingPlans = [
     name: 'Starter',
     price: 197,
     conversations: 200,
-    features: [
-      '200 AI conversations/month',
-      'Appointment auto-booking',
-      'Lead scoring & qualification',
-      'WhatsApp handoff alerts',
-      'Full dashboard access',
-    ],
+    features: ['200 AI conversations/month', ...sharedFeatures],
     popular: false,
     cta: 'Get Started',
   },
@@ -104,13 +101,7 @@ const pricingPlans = [
     name: 'Growth',
     price: 497,
     conversations: 800,
-    features: [
-      '800 AI conversations/month',
-      'Everything in Starter',
-      'Automated follow-up sequences',
-      'Bilingual (English + Arabic)',
-      'Priority support',
-    ],
+    features: ['800 AI conversations/month', ...sharedFeatures],
     popular: true,
     cta: 'Most Popular',
   },
@@ -118,13 +109,7 @@ const pricingPlans = [
     name: 'Scale',
     price: 997,
     conversations: 2500,
-    features: [
-      '2,500 AI conversations/month',
-      'Everything in Growth',
-      'Multi-channel handoff',
-      'Appointment reminders',
-      'Dedicated account manager',
-    ],
+    features: ['2,500 AI conversations/month', ...sharedFeatures],
     popular: false,
     cta: 'Contact Sales',
   },
@@ -185,13 +170,13 @@ export default function RealEstateLandingPage() {
       <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm z-50 border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
                 <MessageSquare className="h-5 w-5 text-white" />
               </div>
               <span className="font-bold text-xl text-gray-900">SalesConcierge</span>
               <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Real Estate</span>
-            </div>
+            </Link>
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-gray-600 hover:text-gray-900">Features</a>
               <a href="#pricing" className="text-gray-600 hover:text-gray-900">Pricing</a>
@@ -262,7 +247,7 @@ export default function RealEstateLandingPage() {
                       <Building2 className="h-6 w-6 text-emerald-700" />
                     </div>
                     <div>
-                      <p className="text-white font-semibold">Demo Miracle</p>
+                      <p className="text-white font-semibold">Dubai Properties AI</p>
                       <p className="text-emerald-200 text-sm">Online • AI Assistant</p>
                     </div>
                   </div>
@@ -271,18 +256,18 @@ export default function RealEstateLandingPage() {
                   {/* Customer message */}
                   <div className="flex justify-end">
                     <div className="bg-emerald-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-[80%]">
-                      <p>Hi, I saw your 3-bedroom apartment in Lekki. Is it still available?</p>
+                      <p>Hi, I saw your 3-bed villa in Dubai Marina. Is it still available?</p>
                       <p className="text-emerald-200 text-xs mt-1">2:34 AM</p>
                     </div>
                   </div>
                   {/* AI response */}
                   <div className="flex justify-start">
                     <div className="bg-gray-700 text-white rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%]">
-                      <p>Hi! 👋 Yes, the 3-bedroom apartment in Lekki Phase 1 is available!</p>
-                      <p className="mt-2">It's ₦3.5M/year, fully serviced with:</p>
-                      <p>✓ 24/7 power & water</p>
-                      <p>✓ Swimming pool</p>
-                      <p>✓ Gym access</p>
+                      <p>Hi! 👋 Yes, the 3-bed villa in Dubai Marina is available!</p>
+                      <p className="mt-2">It's AED 3.2M, 2,800 sq ft with:</p>
+                      <p>✓ Direct sea view & private balcony</p>
+                      <p>✓ Swimming pool & gym</p>
+                      <p>✓ 24/7 security & concierge</p>
                       <p className="mt-2">Would you like to schedule a viewing? I have slots available tomorrow at 10 AM or 2 PM.</p>
                       <p className="text-gray-400 text-xs mt-1">2:34 AM • AI Assistant</p>
                     </div>
@@ -298,7 +283,7 @@ export default function RealEstateLandingPage() {
                   <div className="flex justify-start">
                     <div className="bg-gray-700 text-white rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%]">
                       <p>Perfect! ✅ I've booked your viewing for tomorrow at 2 PM.</p>
-                      <p className="mt-2">📍 Address: 15 Admiralty Way, Lekki Phase 1</p>
+                      <p className="mt-2">📍 Address: Marina Walk, Dubai Marina</p>
                       <p className="mt-2">Our agent Sarah will meet you there. I'll send a reminder 2 hours before!</p>
                       <p className="text-gray-400 text-xs mt-1">2:35 AM • AI Assistant</p>
                     </div>
