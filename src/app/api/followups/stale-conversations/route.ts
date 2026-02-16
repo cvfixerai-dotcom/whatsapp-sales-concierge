@@ -83,7 +83,16 @@ function buildNudgeMessage(contact: any, lastAiMessage: string): string {
   return `Hey ${name}! Just checking in — did you get my last message? I'm here if you have any questions!`;
 }
 
+// Vercel CRONs send GET requests
+export async function GET(request: NextRequest) {
+  return handleCron(request);
+}
+
 export async function POST(request: NextRequest) {
+  return handleCron(request);
+}
+
+async function handleCron(request: NextRequest) {
   try {
     // Auth check
     const authHeader = request.headers.get('authorization');

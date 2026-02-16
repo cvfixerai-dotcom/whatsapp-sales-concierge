@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter } from '@/lib/services/rate-limiter';
 
-// This endpoint should be called by a cron job daily
+// Vercel CRONs send GET requests
+export async function GET(request: NextRequest) {
+  return handleCron(request);
+}
+
 export async function POST(request: NextRequest) {
+  return handleCron(request);
+}
+
+async function handleCron(request: NextRequest) {
   try {
-    // Verify the request is from a cron job (using a secret)
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
     
@@ -15,7 +22,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Clean up old rate limit records
     await rateLimiter.cleanupOldRecords();
 
     return NextResponse.json({
@@ -34,11 +40,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    message: 'This endpoint cleans up old rate limit records. Call with POST using cron secret.',
-    usage: 'POST /api/cleanup/rate-limits with Authorization: Bearer CRON_SECRET',
-  });
 }

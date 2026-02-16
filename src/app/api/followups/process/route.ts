@@ -19,7 +19,16 @@ async function sendWhatsApp(tenantId: string, to: string, body: string): Promise
   } catch (err) { console.error('[FollowUp] Send failed:', err); return false; }
 }
 
+// Vercel CRONs send GET requests
+export async function GET(request: NextRequest) {
+  return handleCron(request);
+}
+
 export async function POST(request: NextRequest) {
+  return handleCron(request);
+}
+
+async function handleCron(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
