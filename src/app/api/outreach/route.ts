@@ -85,6 +85,46 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
+// Create new lead
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { title, phone, website, city, contact_name, linkedin_url } = body;
+
+    if (!title?.trim()) {
+      return NextResponse.json({ error: 'Agency name required' }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('agency_leads')
+      .insert({
+        title: title.trim(),
+        phone: phone?.trim() || null,
+        website: website?.trim() || null,
+        city: city?.trim() || 'Dubai',
+        contact_name: contact_name?.trim() || null,
+        linkedin_url: linkedin_url?.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Outreach] Insert error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, lead: data });
+  } catch (err) {
+    console.error('[Outreach] Error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 // Bulk update
 export async function PUT(request: NextRequest) {
   try {

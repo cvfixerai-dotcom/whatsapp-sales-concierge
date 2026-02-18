@@ -125,6 +125,7 @@ export default function OutreachPage() {
         body: JSON.stringify({ id, field, value: newValue }),
       });
       if (!res.ok) throw new Error('Update failed');
+      toast.success('Saved', { duration: 1000 });
     } catch (err) {
       setLeads(prev =>
         prev.map(l => (l.id === id ? { ...l, [field]: currentValue } : l))
@@ -149,6 +150,7 @@ export default function OutreachPage() {
           body: JSON.stringify({ id, field, value: value || null }),
         });
         if (!res.ok) throw new Error('Save failed');
+        toast.success('Saved', { duration: 1000 });
       } catch (err) {
         toast.error(`Failed to save ${field}`);
       }
@@ -206,11 +208,38 @@ export default function OutreachPage() {
   };
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newLead, setNewLead] = useState({ title: '', phone: '', website: '', city: 'Dubai' });
+  const [adding, setAdding] = useState(false);
 
   const copyOutreachMessage = (leadId: string) => {
     navigator.clipboard.writeText(OUTREACH_MESSAGE);
     setCopiedId(leadId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleAddLead = async () => {
+    if (!newLead.title.trim()) {
+      toast.error('Agency name is required');
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch('/api/outreach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLead),
+      });
+      if (!res.ok) throw new Error('Failed to add lead');
+      toast.success('Lead added successfully');
+      setNewLead({ title: '', phone: '', website: '', city: 'Dubai' });
+      setShowAddForm(false);
+      fetchLeads();
+    } catch (err) {
+      toast.error('Failed to add lead');
+    } finally {
+      setAdding(false);
+    }
   };
 
   if (status === 'loading' || (loading && isAdmin)) {
@@ -323,7 +352,7 @@ export default function OutreachPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-10">#</th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-10 sticky left-0 bg-gray-50 z-10">#</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agency</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company (Corrected)</th>
@@ -341,7 +370,7 @@ export default function OutreachPage() {
               {leads.length > 0 ? (
                 leads.map((lead, idx) => (
                   <tr key={lead.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono">
+                    <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono sticky left-0 bg-white z-10 border-r border-gray-200">
                       {page * pageSize + idx + 1}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
