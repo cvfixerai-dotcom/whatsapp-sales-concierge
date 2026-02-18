@@ -305,6 +305,13 @@ export default function OutreachPage() {
             Mark All Visible as Contacted
           </button>
           <button
+            onClick={() => setShowAddForm(v => !v)}
+            className="flex items-center px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
+          >
+            {showAddForm ? <X className="w-4 h-4 mr-1.5" /> : <span className="mr-1.5">+</span>}
+            {showAddForm ? 'Cancel' : 'Add New Lead'}
+          </button>
+          <button
             onClick={handleRefresh}
             disabled={refreshing}
             className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
@@ -346,6 +353,51 @@ export default function OutreachPage() {
           </div>
         )}
       </div>
+
+      {showAddForm && (
+        <div className="bg-white rounded-lg shadow p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Add New Lead</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+            <input
+              type="text"
+              placeholder="Agency Name *"
+              value={newLead.title}
+              onChange={e => setNewLead(p => ({ ...p, title: e.target.value }))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+            <input
+              type="tel"
+              placeholder="Phone"
+              value={newLead.phone}
+              onChange={e => setNewLead(p => ({ ...p, phone: e.target.value }))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+            <input
+              type="url"
+              placeholder="Website"
+              value={newLead.website}
+              onChange={e => setNewLead(p => ({ ...p, website: e.target.value }))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+            <input
+              type="text"
+              placeholder="City"
+              value={newLead.city}
+              onChange={e => setNewLead(p => ({ ...p, city: e.target.value }))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={handleAddLead}
+              disabled={adding || !newLead.title.trim()}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {adding ? 'Adding...' : 'Add Lead'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow">
         <div className="overflow-x-auto">
