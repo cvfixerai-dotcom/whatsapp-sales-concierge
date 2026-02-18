@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { twilioService } from '@/lib/services/twilio';
 import { aiAgent } from '@/lib/ai/agent';
+import { autoExtractAndSave, extractBudgetHints, extractTimelineHints } from '@/lib/ai/auto-extract';
 
 const CONVERSATION_WINDOW_HOURS = 24;
 
@@ -157,6 +158,45 @@ export async function POST(request: NextRequest) {
         metadata: { from: fromNumber, to: toNumber },
       });
     if (msgErr) logErr('Failed to save message', msgErr);
+
+    // 🎯 AUTO-EXTRACT DATA (safety net for when AI fails to call update_lead)
+    log('Running auto-extraction...');
+    try {
+      const extractionResult = await autoExtractAndSave(contact.id, messageBody, contact);
+      if (extractionResult.hasChanges) {
+        log(`Auto-extracted: ${JSON.stringify(extractionResult)}`);
+        // Refresh contact data if we extracted new info
+        const { data: updatedContact } = await supabaseAdmin
+          .from('contacts')
+          .select('*')
+          .eq('id', contact.id)
+          .single();
+        if (updatedContact) contact = updatedContact;
+      }
+
+      // Extract budget/timeline hints for scoring
+      const budgetHint = extractBudgetHints(messageBody);
+      const timelineHint = extractTimelineHints(messageBody);
+      const metadataUpdates: any = {};
+      
+      if (budgetHint && !contact.budget_range) {
+        metadataUpdates.budget_range = budgetHint;
+        log(`Auto-extracted budget: ${budgetHint}`);
+      }
+      if (timelineHint && !contact.timeline) {
+        metadataUpdates.timeline = timelineHint;
+        log(`Auto-extracted timeline: ${timelineHint}`);
+      }
+
+      if (Object.keys(metadataUpdates).length > 0) {
+        await supabaseAdmin
+          .from('contacts')
+          .update(metadataUpdates)
+          .eq('id', contact.id);
+      }
+    } catch (extractErr) {
+      logErr('Auto-extraction failed (non-fatal)', extractErr);
+    }
 
     // Update contact timestamps
     await supabaseAdmin

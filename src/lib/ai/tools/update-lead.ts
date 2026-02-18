@@ -25,7 +25,8 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
   contact?: any;
 }> {
   try {
-    console.log(`[Tool: updateLead] Updating contact ${contactId}`, updates);
+    console.log(`[Tool: updateLead] ✅ CALLED - Updating contact ${contactId}`);
+    console.log(`[Tool: updateLead] Updates:`, JSON.stringify(updates, null, 2));
 
     // Validate contact exists
     const { data: existingContact, error: fetchError } = await supabaseAdmin
@@ -35,12 +36,20 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       .single();
 
     if (fetchError || !existingContact) {
-      console.error('[Tool: updateLead] Contact not found:', contactId);
+      console.error('[Tool: updateLead] ❌ FAILED - Contact not found:', contactId);
       return {
         success: false,
         error: 'Contact not found',
       };
     }
+
+    console.log('[Tool: updateLead] Existing contact data:', {
+      name: existingContact.name,
+      email: existingContact.email,
+      temperature: existingContact.temperature,
+      budget_range: existingContact.budget_range,
+      timeline: existingContact.timeline,
+    });
 
     // Prepare update data
     const updateData = {
@@ -68,12 +77,21 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       .single();
 
     if (updateError) {
-      console.error('[Tool: updateLead] Update failed:', updateError);
+      console.error('[Tool: updateLead] ❌ DATABASE UPDATE FAILED:', updateError);
       return {
         success: false,
         error: 'Failed to update contact',
       };
     }
+
+    console.log('[Tool: updateLead] ✅ DATABASE UPDATE SUCCESSFUL');
+    console.log('[Tool: updateLead] Updated contact data:', {
+      name: updatedContact.name,
+      email: updatedContact.email,
+      temperature: updatedContact.temperature,
+      budget_range: updatedContact.budget_range,
+      timeline: updatedContact.timeline,
+    });
 
     // Recalculate lead score
     const newScore = await calculateLeadScore(updatedContact);
@@ -89,7 +107,7 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       // Don't fail the operation, just log it
     }
 
-    console.log(`[Tool: updateLead] Contact updated successfully. New score: ${newScore}`);
+    console.log(`[Tool: updateLead] ✅ COMPLETED - Contact updated successfully. New score: ${newScore}/100`);
 
     // Handle follow-up scheduling based on temperature change
     if (updates.temperature) {
