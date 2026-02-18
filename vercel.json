@@ -2,15 +2,15 @@
   "crons": [
     {
       "path": "/api/followups/process",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/followups/stale-conversations",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/reminders/process",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 15 * * *"
     },
     {
       "path": "/api/cleanup/rate-limits",
