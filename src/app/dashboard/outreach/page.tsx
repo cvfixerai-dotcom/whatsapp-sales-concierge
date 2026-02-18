@@ -49,14 +49,17 @@ const TOGGLE_FIELDS = [
   { key: 'client', label: 'Client' },
 ] as const;
 
-const OUTREACH_MESSAGE = `Hi,  quick question.
+const OUTREACH_MESSAGE = `Hi, quick question.
 
 Do you ever miss WhatsApp property inquiries when you're busy or after hours?
 
-We built a WhatsApp AI assistant for Dubai real estate teams that replies instantly, qualifies buyers, and books viewings automatically.
+We built a WhatsApp AI Sales Assistant for Dubai real estate teams that replies instantly, qualifies buyers, and books viewings automatically.
 
-You can try the live demo here:
+Try the live demo here:
 https://concierge.fixeraitech.com/realestate
+
+Or message the demo assistant directly on WhatsApp:
++1 409 908 3940
 
 Curious what you think.`;
 
@@ -202,9 +205,12 @@ export default function OutreachPage() {
     }
   };
 
-  const copyOutreachMessage = () => {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyOutreachMessage = (leadId: string) => {
     navigator.clipboard.writeText(OUTREACH_MESSAGE);
-    toast.success('Message copied!');
+    setCopiedId(leadId);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   if (status === 'loading' || (loading && isAdmin)) {
@@ -415,26 +421,35 @@ export default function OutreachPage() {
                           </a>
                         )}
                         <a
-                          href={lead.linkedin_url
-                            ? (lead.linkedin_url.startsWith('http') ? lead.linkedin_url : `https://${lead.linkedin_url}`)
-                            : `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(lead.title)}%20Dubai`
-                          }
+                          href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(lead.title)}%20Dubai`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
-                          title={lead.linkedin_url ? 'Open LinkedIn Profile' : 'Search LinkedIn'}
+                          title="Search LinkedIn for people"
                         >
-                          <Linkedin className="w-3 h-3 mr-0.5" />
-                          {lead.linkedin_url ? 'Open' : 'Search'}
+                          <Search className="w-3 h-3 mr-0.5" />
+                          Search
                         </a>
                         <button
-                          onClick={copyOutreachMessage}
-                          className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
+                          onClick={() => copyOutreachMessage(lead.id)}
+                          className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded hover:bg-purple-100 relative"
                           title="Copy outreach message"
                         >
                           <Copy className="w-3 h-3 mr-0.5" />
-                          Msg
+                          {copiedId === lead.id ? 'Copied' : 'Msg'}
                         </button>
+                        {lead.linkedin_url && (
+                          <a
+                            href={lead.linkedin_url.startsWith('http') ? lead.linkedin_url : `https://${lead.linkedin_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                            title="Open LinkedIn Profile"
+                          >
+                            <Linkedin className="w-3 h-3 mr-0.5" />
+                            Open Profile
+                          </a>
+                        )}
                       </div>
                     </td>
                     {TOGGLE_FIELDS.map(f => (
