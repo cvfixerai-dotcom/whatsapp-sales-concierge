@@ -1,5 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/db/client';
