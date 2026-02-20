@@ -52,13 +52,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    const { data: messages } = await supabaseAdmin
+    const { data: messages, error: msgErr } = await supabaseAdmin
       .from('messages')
       .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_trigger, conversation_id')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    return NextResponse.json({ conversation, messages: messages || [] });
+    console.log(`[GET /conv/${conversationId}] msgs=${messages?.length ?? 0} err=${msgErr?.message ?? 'none'}`);
+
+    const response = NextResponse.json({ conversation, messages: messages || [] });
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return response;
   } catch (error) {
     console.error('[Conversation API] Error:', error);
     return NextResponse.json({ error: 'Failed to fetch conversation' }, { status: 500 });

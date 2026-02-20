@@ -142,7 +142,7 @@ export default function ConversationViewer() {
     pollIntervalRef.current = setInterval(async () => {
       if (!isMountedRef.current) return;
       try {
-        const res = await fetch(`/api/conversations/${conversationId}`);
+        const res = await fetch(`/api/conversations/${conversationId}`, { cache: 'no-store' });
         if (!res.ok || !isMountedRef.current) return;
         const { messages: fresh, conversation } = await res.json();
         if (!isMountedRef.current) return;
@@ -155,7 +155,7 @@ export default function ConversationViewer() {
   const fetchConversationData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/conversations/${conversationId}`);
+      const res = await fetch(`/api/conversations/${conversationId}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Not found');
       const { conversation, messages: msgs } = await res.json();
       if (!isMountedRef.current) return;
