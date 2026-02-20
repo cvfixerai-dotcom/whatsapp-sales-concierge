@@ -52,40 +52,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    // Get ALL conversation IDs for this contact so we merge split-conversation history
-    const contactId = conversation.contact_id;
-    const { data: siblingConvs } = await supabaseAdmin
-      .from('conversations')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('contact_id', contactId);
-
-    const allConvIds = (siblingConvs || []).map((c: any) => c.id);
-    if (!allConvIds.includes(conversationId)) allConvIds.push(conversationId);
-
-    // Fetch messages across all conversations for this contact
-    const { data: messages, error: msgError } = await supabaseAdmin
+    const { data: messages } = await supabaseAdmin
       .from('messages')
       .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_trigger, conversation_id')
-      .in('conversation_id', allConvIds)
+      .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    if (msgError) {
-      console.error('[Conversation API] Messages error:', msgError);
-    }
-
-    // Dedup by id in case of any overlap
-    const seen = new Set<string>();
-    const deduped = (messages || []).filter((m: any) => {
-      if (seen.has(m.id)) return false;
-      seen.add(m.id);
-      return true;
-    });
-
-    return NextResponse.json({
-      conversation,
-      messages: deduped,
-    });
+    return NextResponse.json({ conversation, messages: messages || [] });
   } catch (error) {
     console.error('[Conversation API] Error:', error);
     return NextResponse.json({ error: 'Failed to fetch conversation' }, { status: 500 });

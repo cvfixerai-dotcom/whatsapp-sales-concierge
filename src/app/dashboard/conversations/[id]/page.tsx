@@ -323,7 +323,7 @@ export default function ConversationViewer() {
         ? data.message
         : {
             id: `temp-${Date.now()}-${Math.random()}`,
-            content: messageText,
+            content: inputMessage.trim(),
             sender_type: 'human',
             direction: 'outbound',
             created_at: new Date().toISOString(),
