@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Primary: fetch messages for this conversation
     const { data: primaryMsgs, error: msgErr } = await supabaseAdmin
       .from('messages')
-      .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_trigger, conversation_id')
+      .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_reason, requires_handoff, conversation_id')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       for (const sib of (siblings || [])) {
         const { data: sibMsgs } = await supabaseAdmin
           .from('messages')
-          .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_trigger, conversation_id')
+          .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_reason, requires_handoff, conversation_id')
           .eq('conversation_id', sib.id)
           .order('created_at', { ascending: true });
         if (sibMsgs?.length) allMessages = [...allMessages, ...sibMsgs];
@@ -88,9 +88,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; })
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
+    const normalizedMessages = messages.map((m: any) => ({
+      ...m,
+      handoff_trigger: m.handoff_trigger ?? m.handoff_reason ?? (m.requires_handoff ? 'Handoff requested' : null),
+    }));
+
     console.log(`[GET /conv/${conversationId}] primary=${primaryMsgs?.length ?? 0} total=${messages.length} err=${msgErr?.message ?? 'none'}`);
 
-    const response = NextResponse.json({ conversation, messages: messages || [] });
+    const response = NextResponse.json({ conversation, messages: normalizedMessages || [] });
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     return response;
   } catch (error) {
