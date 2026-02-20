@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Get messages
     const { data: messages, error: msgError } = await supabaseAdmin
       .from('messages')
-      .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment')
+      .select('id, content, sender_type, direction, created_at, ai_confidence, ai_intent, ai_sentiment, handoff_trigger')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 

@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       .from('messages')
       .insert({
         conversation_id,
+        tenant_id: tenantId,
         content: content.trim(),
         sender_type: 'human',
         direction: 'outbound',

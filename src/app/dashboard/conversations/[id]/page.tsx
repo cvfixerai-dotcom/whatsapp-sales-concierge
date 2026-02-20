@@ -116,10 +116,23 @@ export default function ConversationViewer() {
   };
 
   const mergeMessages = (prev: Message[], fresh: Message[]) => {
-    const existingIds = new Set(prev.map((m) => m.id));
-    const newOnes = fresh.filter((m) => !existingIds.has(m.id));
-    if (newOnes.length === 0) return prev;
-    return [...prev, ...newOnes].sort(
+    // Keep temp messages that don't yet have a matching real DB entry
+    const freshIds = new Set(fresh.map((m) => m.id));
+    const temps = prev.filter(
+      (m) => String(m.id).startsWith('temp-') &&
+        !fresh.some(
+          (f) =>
+            f.sender_type === m.sender_type &&
+            f.content === m.content &&
+            Math.abs(new Date(f.created_at).getTime() - new Date(m.created_at).getTime()) < 30000
+        )
+    );
+    const realIds = new Set(prev.filter((m) => !String(m.id).startsWith('temp-')).map((m) => m.id));
+    const newOnes = fresh.filter((m) => !realIds.has(m.id));
+    if (newOnes.length === 0 && temps.length === prev.filter((m) => String(m.id).startsWith('temp-')).length) {
+      return prev;
+    }
+    return [...fresh, ...temps].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
   };
@@ -304,14 +317,23 @@ export default function ConversationViewer() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to send');
 
-      // Optimistically add message (realtime will also deliver it)
-      if (data.message) {
-        setMessages(prev => {
-          const exists = prev.some(m => m.id === data.message.id);
-          if (exists) return prev;
-          return [...prev, data.message];
-        });
-      }
+      // Add the message — use DB-returned message if available, else build a local one
+      const sentMsg = data.message?.id
+        ? data.message
+        : {
+            id: `temp-${Date.now()}-${Math.random()}`,
+            content: messageText,
+            sender_type: 'human',
+            direction: 'outbound',
+            created_at: new Date().toISOString(),
+          };
+      setMessages(prev => {
+        const exists = prev.some(m => m.id === sentMsg.id);
+        if (exists) return prev;
+        return [...prev, sentMsg].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      });
 
       setInputMessage('');
       setIsHumanMode(true);
