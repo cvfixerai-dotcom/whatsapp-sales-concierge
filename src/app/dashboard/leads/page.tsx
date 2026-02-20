@@ -179,10 +179,20 @@ export default function LeadsPage() {
 
   const handleViewLead = (lead: Lead) => {
     setSelectedLead(lead);
-    setEditForm(lead);
-    setNotes(lead.notes || '');
-    fetchConversationHistory(lead.id);
-    setShowDetailModal(true);
+  };
+
+  const handleMessageLead = async (contactId: string) => {
+    try {
+      const res = await fetch('/api/conversations/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact_id: contactId }),
+      });
+      const data = await res.json();
+      router.push(`/dashboard/conversations/${data.conversation_id}`);
+    } catch (error) {
+      toast.error('Failed to open conversation');
+    }
   };
 
   const handleUpdateLead = async () => {
