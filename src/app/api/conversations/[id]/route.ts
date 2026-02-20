@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Get conversation with contact info
     const { data: conversation, error: convError } = await supabaseAdmin
       .from('conversations')
-      .select('*, contacts(id, name, whatsapp_number, temperature, email, lead_score, notes, timeline, budget_range, service_interest)')
+      .select('*, contacts(*)')
       .eq('id', conversationId)
       .eq('tenant_id', tenantId)
       .single();

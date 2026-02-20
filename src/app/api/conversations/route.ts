@@ -1,5 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/db/client';
@@ -60,7 +63,9 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({ conversations: items });
+    const response = NextResponse.json({ conversations: items });
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return response;
   } catch (error) {
     console.error('[Conversations API] Error:', error);
     return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 });
