@@ -358,6 +358,9 @@ export default function LeadsPage() {
           <button onClick={() => { handleViewLead(row.original); setEditingLead(row.original); }} className="p-1 hover:bg-gray-100 rounded">
             <Edit className="w-4 h-4 text-gray-600" />
           </button>
+          <button onClick={() => handleMessageLead(row.original.id)} className="p-1 hover:bg-green-100 rounded" title="Message Lead">
+            <MessageSquare className="w-4 h-4 text-green-600" />
+          </button>
         </div>
       ),
     },

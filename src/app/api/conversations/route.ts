@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('conversations')
-      .select('id, contact_id, status, handoff_requested, created_at, updated_at, message_count, contacts(name, whatsapp_number, temperature)')
+      .select('id, contact_id, status, created_at, updated_at, message_count, contacts(name, whatsapp_number, temperature)')
       .eq('tenant_id', tenantId)
       .order('updated_at', { ascending: false });
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
         return {
           id: conv.id,
           status: conv.status || 'active',
-          handoff_requested: conv.handoff_requested || false,
+          handoff_requested: conv.status === 'handoff-requested' || conv.status === 'human-handling',
           updated_at: conv.updated_at,
           contact_name: contact?.name || 'Unknown',
           contact_phone: contact?.whatsapp_number || '',
