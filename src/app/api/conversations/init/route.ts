@@ -18,28 +18,27 @@ export async function POST(request: NextRequest) {
 
     const tenantId = session.user.tenantId;
 
-    // Find the most recent active conversation for this contact
+    // Find the most recent non-closed conversation (works even if is_active was never set)
     const { data: existing } = await supabaseAdmin
       .from('conversations')
-      .select('id, status')
+      .select('id, status, is_active')
       .eq('contact_id', contact_id)
       .eq('tenant_id', tenantId)
-      .eq('is_active', true)
+      .neq('status', 'closed')
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (existing) {
+      // Repair is_active if missing (old records created without it)
+      if (!existing.is_active) {
+        await supabaseAdmin
+          .from('conversations')
+          .update({ is_active: true })
+          .eq('id', existing.id);
+      }
       return NextResponse.json({ conversation_id: existing.id });
     }
-
-    // Close any stale inactive conversations that might block webhook lookup
-    await supabaseAdmin
-      .from('conversations')
-      .update({ is_active: false })
-      .eq('contact_id', contact_id)
-      .eq('tenant_id', tenantId)
-      .eq('is_active', false); // no-op but safe
 
     // Create new conversation
     const { data: newConv, error } = await supabaseAdmin

@@ -107,16 +107,22 @@ export async function POST(request: NextRequest) {
     }
     log(`Contact: ${contact.id} (${contact.name || cleanFrom})`);
 
-    // 7. Get or create conversation — always use the most recently active one
+    // 7. Get or create conversation — find most recent non-closed conv (works for old records without is_active set)
     let { data: conversation } = await supabaseAdmin
       .from('conversations')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('contact_id', contact.id)
-      .eq('is_active', true)
+      .neq('status', 'closed')
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (conversation && !conversation.is_active) {
+      // Repair: ensure is_active is set on the found conversation
+      await supabaseAdmin.from('conversations').update({ is_active: true }).eq('id', conversation.id);
+      conversation = { ...conversation, is_active: true };
+    }
 
     if (!conversation) {
       // Close old conversations
@@ -125,7 +131,7 @@ export async function POST(request: NextRequest) {
         .update({ is_active: false, status: 'closed', conversation_window_end: new Date().toISOString() })
         .eq('tenant_id', tenantId)
         .eq('contact_id', contact.id)
-        .eq('is_active', true);
+        .neq('status', 'closed');
 
       const { data: newConv, error: convErr } = await supabaseAdmin
         .from('conversations')

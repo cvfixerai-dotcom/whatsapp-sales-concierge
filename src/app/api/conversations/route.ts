@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
       .from('conversations')
       .select('id, contact_id, status, created_at, updated_at, message_count, contacts(name, whatsapp_number, temperature)')
       .eq('tenant_id', tenantId)
+      .neq('status', 'closed')
       .order('updated_at', { ascending: false });
 
     if (contactId) {

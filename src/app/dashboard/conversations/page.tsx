@@ -35,6 +35,8 @@ export default function ConversationsPage() {
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     } else if (status === 'authenticated' && session?.user?.tenantId) {
+      // Silently repair is_active on existing conversations (one-time fix for legacy records)
+      fetch('/api/conversations/repair', { method: 'POST' }).catch(() => {});
       fetchConversations();
     }
   }, [status, session]);
