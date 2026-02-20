@@ -160,22 +160,6 @@ export default function ConversationViewer() {
       const { conversation, messages: msgs } = await res.json();
       if (!isMountedRef.current) return;
 
-      // If contact has a more recent active conversation, redirect to it
-      const contactId = conversation.contact_id || conversation.contacts?.id;
-      if (contactId) {
-        const listRes = await fetch(`/api/conversations?contact_id=${contactId}`);
-        if (listRes.ok) {
-          const { conversations: list } = await listRes.json();
-          if (list?.length > 0) {
-            const latest = list[0]; // list is ordered by last_message_time desc
-            if (latest.id !== conversationId) {
-              router.replace(`/dashboard/conversations/${latest.id}`);
-              return;
-            }
-          }
-        }
-      }
-
       setContact(conversation.contacts);
       setMessages(msgs || []);
       setIsHumanMode(conversation.status === 'human-handling' || !!conversation.assigned_agent_id);
