@@ -1,31 +1,13 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
 import {
-  User,
-  Phone,
-  Mail,
-  Calendar,
-  Clock,
-  MessageSquare,
-  Bot,
-  UserCheck,
-  AlertCircle,
-  UserPlus,
-  Edit,
-  Plus,
-  Send,
-  Check,
-  X,
-  Info,
-  Target,
-  TrendingUp,
-  FileText,
-  Lightbulb,
+  User, Phone, Mail, Calendar, Clock, MessageSquare, Bot, UserCheck,
+  AlertCircle, UserPlus, Edit, Plus, Send, Check, X, Info, Target,
+  TrendingUp, FileText, Lightbulb, ArrowLeft, RefreshCw,
 } from 'lucide-react';
 
 interface Contact {
@@ -109,20 +91,19 @@ export default function ConversationViewer() {
   const [suggestedResponses, setSuggestedResponses] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const subscriptionRef = useRef<any>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     } else if (status === 'authenticated' && conversationId) {
       fetchConversationData();
-      setupRealtimeSubscription();
     }
-
     return () => {
-      if (subscriptionRef.current) {
-        supabase.removeChannel(subscriptionRef.current);
-      }
+      isMountedRef.current = false;
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, [status, conversationId]);
 
@@ -134,12 +115,37 @@ export default function ConversationViewer() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const mergeMessages = (prev: Message[], fresh: Message[]) => {
+    const existingIds = new Set(prev.map((m) => m.id));
+    const newOnes = fresh.filter((m) => !existingIds.has(m.id));
+    if (newOnes.length === 0) return prev;
+    return [...prev, ...newOnes].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  };
+
+  const startPolling = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(async () => {
+      if (!isMountedRef.current) return;
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}`);
+        if (!res.ok || !isMountedRef.current) return;
+        const { messages: fresh, conversation } = await res.json();
+        if (!isMountedRef.current) return;
+        if (fresh) setMessages((prev) => mergeMessages(prev, fresh));
+        if (conversation) setIsHumanMode(conversation.status === 'human-handling' || !!conversation.assigned_agent_id);
+      } catch {}
+    }, 4000);
+  };
+
   const fetchConversationData = async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/conversations/${conversationId}`);
       if (!res.ok) throw new Error('Not found');
       const { conversation, messages: msgs } = await res.json();
+      if (!isMountedRef.current) return;
       setContact(conversation.contacts);
       setMessages(msgs || []);
       setIsHumanMode(conversation.status === 'human-handling' || !!conversation.assigned_agent_id);
@@ -148,48 +154,12 @@ export default function ConversationViewer() {
       if (conversation.status === 'human-handling' || conversation.assigned_agent_id) {
         generateSuggestedResponses(msgs || []);
       }
+      startPolling();
     } catch (error) {
       console.error('Error fetching conversation:', error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
-  };
-
-  const setupRealtimeSubscription = () => {
-    subscriptionRef.current = supabase
-      .channel(`conversation-${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          const newMessage = payload.new as Message;
-          setMessages((prev) => [...prev, newMessage]);
-          
-          // Update insights with new message
-          generateInsights([...messages, newMessage]);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'conversations',
-          filter: `id=eq.${conversationId}`,
-        },
-        (payload) => {
-          if (payload.new.assigned_agent_id && !payload.old.assigned_agent_id) {
-            setIsHumanMode(true);
-            generateSuggestedResponses(messages);
-          }
-        }
-      )
-      .subscribe();
   };
 
   const generateInsights = (msgs: Message[]) => {
@@ -385,10 +355,10 @@ export default function ConversationViewer() {
 
     try {
       const newNotes = (contact.notes || '') + `\n\n[${new Date().toLocaleString()}] ${note}`;
-      const res = await fetch(`/api/leads/${contact.id}`, {
+      const res = await fetch(`/api/leads`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: newNotes }),
+        body: JSON.stringify({ id: contact.id, notes: newNotes }),
       });
       if (!res.ok) throw new Error('Failed to save note');
       setContact({ ...contact, notes: newNotes });
@@ -556,6 +526,13 @@ export default function ConversationViewer() {
         {/* Chat Header */}
         <div className="bg-[#075e54] px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => router.push('/dashboard/conversations')}
+              className="p-1.5 rounded-full hover:bg-white/20 transition-colors flex-shrink-0"
+              title="Back to conversations"
+            >
+              <ArrowLeft className="w-5 h-5 text-white" />
+            </button>
             <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
               <User className="w-5 h-5 text-gray-600" />
             </div>
@@ -565,6 +542,10 @@ export default function ConversationViewer() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <span className="text-xs text-green-300 flex items-center gap-1">
+              <RefreshCw className="w-3 h-3 animate-pulse" />
+              Live
+            </span>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${
               isHumanMode ? 'bg-green-400 text-green-900' : 'bg-blue-400 text-blue-900'
             }`}>
