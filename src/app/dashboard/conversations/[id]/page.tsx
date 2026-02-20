@@ -137,53 +137,16 @@ export default function ConversationViewer() {
   const fetchConversationData = async () => {
     try {
       setLoading(true);
-
-      // Fetch conversation with contact details
-      const { data: conversation, error: convError } = await supabase
-        .from('conversations')
-        .select(`
-          *,
-          contacts(*)
-        `)
-        .eq('id', conversationId)
-        .single();
-
-      if (convError) throw convError;
-
+      const res = await fetch(`/api/conversations/${conversationId}`);
+      if (!res.ok) throw new Error('Not found');
+      const { conversation, messages: msgs } = await res.json();
       setContact(conversation.contacts);
-
-      // Fetch messages
-      const { data: messageData, error: msgError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at');
-
-      if (msgError) throw msgError;
-      setMessages(messageData || []);
-
-      // Fetch appointment if exists
-      const { data: aptData } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .eq('status', 'scheduled')
-        .single();
-
-      setAppointment(aptData);
-
-      // Check if human agent is assigned
-      setIsHumanMode(!!conversation.assigned_agent_id);
-
-      // Generate AI insights
-      generateInsights(messageData || []);
-
-      // Build timeline
-      buildTimeline(conversation, messageData || [], aptData);
-
-      // Generate suggested responses if in human mode
-      if (conversation.assigned_agent_id) {
-        generateSuggestedResponses(messageData || []);
+      setMessages(msgs || []);
+      setIsHumanMode(conversation.status === 'human-handling' || !!conversation.assigned_agent_id);
+      generateInsights(msgs || []);
+      buildTimeline(conversation, msgs || [], null);
+      if (conversation.status === 'human-handling' || conversation.assigned_agent_id) {
+        generateSuggestedResponses(msgs || []);
       }
     } catch (error) {
       console.error('Error fetching conversation:', error);
@@ -394,27 +357,21 @@ export default function ConversationViewer() {
   const handleTakeOver = async () => {
     try {
       if (isHumanMode) {
-        // Hand back to AI
-        const { error } = await supabase
-          .from('conversations')
-          .update({
-            assigned_agent_id: null,
-            status: 'active',
-          })
-          .eq('id', conversationId);
-        if (error) throw error;
+        const res = await fetch(`/api/conversations/${conversationId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigned_agent_id: null, status: 'active' }),
+        });
+        if (!res.ok) throw new Error('Failed to hand back to AI');
         setIsHumanMode(false);
         setSuggestedResponses([]);
       } else {
-        // Take over
-        const { error } = await supabase
-          .from('conversations')
-          .update({
-            assigned_agent_id: session?.user?.id,
-            status: 'human-handling',
-          })
-          .eq('id', conversationId);
-        if (error) throw error;
+        const res = await fetch(`/api/conversations/${conversationId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigned_agent_id: session?.user?.id, status: 'human-handling' }),
+        });
+        if (!res.ok) throw new Error('Failed to take over');
         setIsHumanMode(true);
         generateSuggestedResponses(messages);
       }
@@ -427,17 +384,14 @@ export default function ConversationViewer() {
     if (!contact || !note.trim()) return;
 
     try {
-      const { error } = await supabase
-        .from('contacts')
-        .update({
-          notes: (contact.notes || '') + `\n\n[${new Date().toLocaleString()}] ${note}`,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', contact.id);
-
-      if (error) throw error;
-
-      setContact({ ...contact, notes: (contact.notes || '') + `\n\n[${new Date().toLocaleString()}] ${note}` });
+      const newNotes = (contact.notes || '') + `\n\n[${new Date().toLocaleString()}] ${note}`;
+      const res = await fetch(`/api/leads/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: newNotes }),
+      });
+      if (!res.ok) throw new Error('Failed to save note');
+      setContact({ ...contact, notes: newNotes });
       setNote('');
       setShowNoteModal(false);
     } catch (error) {
@@ -470,9 +424,9 @@ export default function ConversationViewer() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex bg-white">
+    <div className="h-[calc(100vh-4rem)] flex bg-white overflow-hidden">
       {/* Left Panel - Contact Info */}
-      <div className="w-80 border-r border-gray-200 flex flex-col">
+      <div className="w-64 border-r border-gray-200 flex flex-col flex-shrink-0">
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center space-x-4">
             <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
@@ -750,7 +704,7 @@ export default function ConversationViewer() {
       </div>
 
       {/* Right Panel - Insights */}
-      <div className="w-80 border-l border-gray-200 flex flex-col">
+      <div className="hidden xl:flex w-64 border-l border-gray-200 flex-col">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
         </div>

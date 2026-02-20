@@ -95,7 +95,7 @@ export default function ConversationsPage() {
   }
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-4">
@@ -162,14 +162,14 @@ export default function ConversationsPage() {
             <a
               key={conv.id}
               href={`/dashboard/conversations/${conv.id}`}
-              className="flex items-center px-6 py-4 hover:bg-gray-50 transition-colors"
+              className="flex items-center px-6 py-4 hover:bg-gray-50 transition-colors overflow-hidden"
             >
               <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
                 <User className="w-5 h-5 text-gray-500" />
               </div>
-              <div className="ml-4 flex-1 min-w-0">
+              <div className="ml-4 flex-1 min-w-0 overflow-hidden">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 truncate">{conv.contact_name}</p>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${temperatureColors[conv.contact_temperature] || temperatureColors.new}`}>
                       {conv.contact_temperature}
@@ -183,13 +183,13 @@ export default function ConversationsPage() {
                   </div>
                   <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{formatTimeAgo(conv.last_message_time)}</span>
                 </div>
-                <div className="flex items-center mt-1">
-                  <span className="mr-1">
+                <div className="flex items-center mt-1 min-w-0">
+                  <span className="mr-1 flex-shrink-0">
                     {conv.last_sender === 'ai' ? <Bot className="w-3 h-3 text-purple-500 inline" /> :
                      conv.last_sender === 'human' ? <UserCheck className="w-3 h-3 text-blue-500 inline" /> :
                      <User className="w-3 h-3 text-gray-400 inline" />}
                   </span>
-                  <p className="text-sm text-gray-500 truncate">{conv.last_message}</p>
+                  <p className="text-sm text-gray-500 truncate flex-1 min-w-0">{conv.last_message}</p>
                   <span className="text-xs text-gray-400 ml-2 flex-shrink-0">{conv.message_count} msgs</span>
                 </div>
               </div>

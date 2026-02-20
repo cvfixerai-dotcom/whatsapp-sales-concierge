@@ -4,6 +4,32 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/db/client';
 
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const { id: conversationId } = await params;
+    const tenantId = session.user.tenantId;
+    const body = await request.json();
+
+    const { data, error } = await supabaseAdmin
+      .from('conversations')
+      .update(body)
+      .eq('id', conversationId)
+      .eq('tenant_id', tenantId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return NextResponse.json({ conversation: data });
+  } catch (error) {
+    console.error('[Conversation PATCH] Error:', error);
+    return NextResponse.json({ error: 'Failed to update conversation' }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
