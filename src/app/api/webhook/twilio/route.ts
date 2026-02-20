@@ -107,15 +107,15 @@ export async function POST(request: NextRequest) {
     }
     log(`Contact: ${contact.id} (${contact.name || cleanFrom})`);
 
-    // 7. Get or create conversation (24-hour window)
-    const windowStart = new Date(Date.now() - CONVERSATION_WINDOW_HOURS * 60 * 60 * 1000);
+    // 7. Get or create conversation — always use the most recently active one
     let { data: conversation } = await supabaseAdmin
       .from('conversations')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('contact_id', contact.id)
       .eq('is_active', true)
-      .gte('conversation_window_start', windowStart.toISOString())
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (!conversation) {

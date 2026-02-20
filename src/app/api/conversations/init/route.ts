@@ -18,17 +18,28 @@ export async function POST(request: NextRequest) {
 
     const tenantId = session.user.tenantId;
 
-    // Check if conversation already exists
+    // Find the most recent active conversation for this contact
     const { data: existing } = await supabaseAdmin
       .from('conversations')
-      .select('id')
+      .select('id, status')
       .eq('contact_id', contact_id)
       .eq('tenant_id', tenantId)
-      .single();
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (existing) {
       return NextResponse.json({ conversation_id: existing.id });
     }
+
+    // Close any stale inactive conversations that might block webhook lookup
+    await supabaseAdmin
+      .from('conversations')
+      .update({ is_active: false })
+      .eq('contact_id', contact_id)
+      .eq('tenant_id', tenantId)
+      .eq('is_active', false); // no-op but safe
 
     // Create new conversation
     const { data: newConv, error } = await supabaseAdmin
@@ -37,6 +48,8 @@ export async function POST(request: NextRequest) {
         contact_id,
         tenant_id: tenantId,
         status: 'active',
+        is_active: true,
+        conversation_window_start: new Date().toISOString(),
         message_count: 0,
       })
       .select()
