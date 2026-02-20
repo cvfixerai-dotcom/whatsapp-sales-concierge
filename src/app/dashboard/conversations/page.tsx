@@ -150,7 +150,7 @@ export default function ConversationsPage() {
       </div>
 
       {/* Conversations List */}
-      <div className="bg-white rounded-lg shadow divide-y divide-gray-200">
+      <div className="bg-white rounded-lg shadow divide-y divide-gray-200 overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-16 text-center">
             <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -164,7 +164,7 @@ export default function ConversationsPage() {
             <a
               key={conv.id}
               href={`/dashboard/conversations/${conv.id}`}
-              className="flex items-center px-6 py-4 hover:bg-gray-50 transition-colors overflow-hidden"
+              className="flex items-center w-full min-w-0 px-6 py-4 hover:bg-gray-50 transition-colors overflow-hidden"
             >
               <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
                 <User className="w-5 h-5 text-gray-500" />

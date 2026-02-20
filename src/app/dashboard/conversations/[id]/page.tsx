@@ -84,8 +84,12 @@ export default function ConversationViewer() {
   const [inputMessage, setInputMessage] = useState('');
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [note, setNote] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [tempSaving, setTempSaving] = useState(false);
+  const [tempError, setTempError] = useState('');
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [suggestedResponses, setSuggestedResponses] = useState<string[]>([]);
@@ -376,6 +380,8 @@ export default function ConversationViewer() {
   const handleAddNote = async () => {
     if (!contact || !note.trim()) return;
 
+    setNoteSaving(true);
+    setNoteError('');
     try {
       const newNotes = (contact.notes || '') + `\n\n[${new Date().toLocaleString()}] ${note}`;
       const res = await fetch(`/api/leads`, {
@@ -389,6 +395,32 @@ export default function ConversationViewer() {
       setShowNoteModal(false);
     } catch (error) {
       console.error('Error adding note:', error);
+      setNoteError('Failed to save note. Please try again.');
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const handleTemperatureChange = async (value: string) => {
+    if (!contact || value === contact.temperature) return;
+
+    const prev = contact.temperature;
+    setTempSaving(true);
+    setTempError('');
+    setContact((current) => (current ? { ...current, temperature: value } : current));
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: contact.id, temperature: value }),
+      });
+      if (!res.ok) throw new Error('Failed to update temperature');
+    } catch (error) {
+      console.error('Error updating temperature:', error);
+      setTempError('Failed to update temperature.');
+      setContact((current) => (current ? { ...current, temperature: prev } : current));
+    } finally {
+      setTempSaving(false);
     }
   };
 
@@ -450,9 +482,28 @@ export default function ConversationViewer() {
           {/* Temperature */}
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-2">Temperature</h3>
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${temperatureColors[contact.temperature as keyof typeof temperatureColors]}`}>
-              {contact.temperature}
-            </span>
+            {isHumanMode ? (
+              <div className="space-y-2">
+                <select
+                  value={contact.temperature}
+                  onChange={(e) => handleTemperatureChange(e.target.value)}
+                  disabled={tempSaving}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="new">New</option>
+                  <option value="warm">Warm</option>
+                  <option value="hot">Hot</option>
+                  <option value="cold">Cold</option>
+                  <option value="booked">Booked</option>
+                </select>
+                {tempSaving && <p className="text-xs text-gray-500">Saving...</p>}
+                {tempError && <p className="text-xs text-red-600">{tempError}</p>}
+              </div>
+            ) : (
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${temperatureColors[contact.temperature as keyof typeof temperatureColors]}`}>
+                {contact.temperature}
+              </span>
+            )}
           </div>
 
           {/* Contact Details */}
@@ -835,8 +886,8 @@ export default function ConversationViewer() {
 
       {/* Add Note Modal */}
       {showNoteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full shadow-xl">
             <div className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Note</h3>
               <textarea
@@ -846,6 +897,7 @@ export default function ConversationViewer() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Enter your note..."
               />
+              {noteError && <p className="text-sm text-red-600 mt-2">{noteError}</p>}
               <div className="mt-4 flex justify-end space-x-2">
                 <button
                   onClick={() => setShowNoteModal(false)}
@@ -855,9 +907,10 @@ export default function ConversationViewer() {
                 </button>
                 <button
                   onClick={handleAddNote}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={noteSaving}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
                 >
-                  Add Note
+                  {noteSaving ? 'Saving...' : 'Add Note'}
                 </button>
               </div>
             </div>
