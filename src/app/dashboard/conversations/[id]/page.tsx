@@ -97,6 +97,7 @@ export default function ConversationViewer() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  const lastSeenRef = useRef<string | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -114,6 +115,23 @@ export default function ConversationViewer() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const updateLastSeen = useCallback((timestamp?: string) => {
+    if (!conversationId || !timestamp) return;
+    if (lastSeenRef.current === timestamp) return;
+    try {
+      const raw = localStorage.getItem('conversationLastSeen');
+      const map = raw ? JSON.parse(raw) : {};
+      map[conversationId] = timestamp;
+      localStorage.setItem('conversationLastSeen', JSON.stringify(map));
+      lastSeenRef.current = timestamp;
+    } catch {}
+  }, [conversationId]);
+
+  useEffect(() => {
+    const latest = messages[messages.length - 1]?.created_at;
+    if (latest) updateLastSeen(latest);
+  }, [messages, updateLastSeen]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -539,6 +557,14 @@ export default function ConversationViewer() {
                 <span className="text-gray-500">Interest:</span>
                 <span>{contact.service_interest || 'Not set'}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Notes</h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+              {contact.notes?.trim() ? contact.notes : 'No notes yet.'}
             </div>
           </div>
 

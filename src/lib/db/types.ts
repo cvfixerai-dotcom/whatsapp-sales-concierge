@@ -167,6 +167,7 @@ export interface Database {
           lead_score: number
           metadata: Json
           name: string | null
+          notes: string | null
           qualification_status: 'unqualified' | 'qualified' | 'contacted' | 'converted'
           service_interest: string | null
           source: 'organic' | 'referral' | 'paid' | 'direct' | 'other'
@@ -189,6 +190,7 @@ export interface Database {
           lead_score?: number
           metadata?: Json
           name?: string | null
+          notes?: string | null
           qualification_status?: 'unqualified' | 'qualified' | 'contacted' | 'converted'
           service_interest?: string | null
           source?: 'organic' | 'referral' | 'paid' | 'direct' | 'other'
@@ -211,6 +213,7 @@ export interface Database {
           lead_score?: number
           metadata?: Json
           name?: string | null
+          notes?: string | null
           qualification_status?: 'unqualified' | 'qualified' | 'contacted' | 'converted'
           service_interest?: string | null
           source?: 'organic' | 'referral' | 'paid' | 'direct' | 'other'

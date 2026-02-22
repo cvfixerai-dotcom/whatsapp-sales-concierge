@@ -67,6 +67,7 @@ CREATE TABLE contacts (
     timeline TEXT CHECK (timeline IN ('urgent', 'this-week', 'this-month', 'exploring', 'not-specified')),
     budget_range TEXT,
     service_interest TEXT,
+    notes TEXT,
     source TEXT DEFAULT 'organic' CHECK (source IN ('organic', 'referral', 'paid', 'direct', 'other')),
     assigned_to UUID REFERENCES users(id),
     metadata JSONB DEFAULT '{}',

@@ -133,6 +133,7 @@ export interface Contact {
   timeline: 'urgent' | 'this-week' | 'this-month' | 'exploring' | 'not-specified' | null;
   budget_range: string | null;
   service_interest: string | null;
+  notes: string | null;
   source: 'organic' | 'referral' | 'paid' | 'direct' | 'other';
   assigned_to: string | null;
   metadata: Json;

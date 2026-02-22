@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { StatsSkeleton, ListSkeleton } from '@/components/skeletons';
@@ -28,35 +28,79 @@ export default function ConversationsPage() {
   const router = useRouter();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [newMessageMap, setNewMessageMap] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const pollRef = useRef(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/login');
-    } else if (status === 'authenticated' && session?.user?.tenantId) {
+      return;
+    }
+    if (status === 'authenticated' && session?.user?.tenantId) {
       // Silently repair is_active on existing conversations (one-time fix for legacy records)
       fetch('/api/conversations/repair', { method: 'POST' }).catch(() => {});
       fetchConversations();
-    }
-  }, [status, session]);
 
-  const fetchConversations = async () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => {
+        fetchConversations({ silent: true });
+      }, 5000);
+    }
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [status, session?.user?.tenantId]);
+
+  const fetchConversations = async ({ silent = false } = {}) => {
     if (!session?.user?.tenantId) return;
     try {
-      setLoading(true);
-      const res = await fetch('/api/conversations');
+      if (!silent) setLoading(true);
+      const res = await fetch('/api/conversations', { cache: 'no-store' });
       if (!res.ok) {
         console.error('Conversations API error:', res.status);
         return;
       }
       const data = await res.json();
-      setConversations(data.conversations || []);
+      const nextConversations = data.conversations || [];
+      let lastSeen = {};
+      try {
+        const raw = localStorage.getItem('conversationLastSeen');
+        lastSeen = raw ? JSON.parse(raw) : {};
+      } catch {}
+
+      const inboundUpdates = {};
+      nextConversations.forEach((conv) => {
+        if (conv.last_sender !== 'contact' || !conv.last_message_time) return;
+        const seenAt = lastSeen[conv.id];
+        if (!seenAt || new Date(conv.last_message_time).getTime() > new Date(seenAt).getTime()) {
+          inboundUpdates[conv.id] = true;
+        }
+      });
+
+      setConversations(nextConversations);
+      setNewMessageMap(inboundUpdates);
     } catch (error) {
       console.error('Error fetching conversations:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  };
+
+  const markConversationSeen = (conv) => {
+    setNewMessageMap((current) => ({ ...current, [conv.id]: false }));
+    try {
+      if (!conv?.last_message_time) return;
+      const raw = localStorage.getItem('conversationLastSeen');
+      const map = raw ? JSON.parse(raw) : {};
+      map[conv.id] = conv.last_message_time;
+      localStorage.setItem('conversationLastSeen', JSON.stringify(map));
+    } catch {}
   };
 
   const filtered = conversations.filter((c) => {
@@ -165,6 +209,7 @@ export default function ConversationsPage() {
               key={conv.id}
               href={`/dashboard/conversations/${conv.id}`}
               className="flex items-center w-full min-w-0 px-6 py-4 hover:bg-gray-50 transition-colors overflow-hidden"
+              onClick={() => markConversationSeen(conv)}
             >
               <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
                 <User className="w-5 h-5 text-gray-500" />
@@ -183,7 +228,14 @@ export default function ConversationsPage() {
                       </span>
                     )}
                   </div>
-                  <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{formatTimeAgo(conv.last_message_time)}</span>
+                  <div className="flex items-center flex-shrink-0 ml-2 space-x-2">
+                    {newMessageMap[conv.id] && conv.last_sender === 'contact' && (
+                      <span className="inline-flex items-center rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        New
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500">{formatTimeAgo(conv.last_message_time)}</span>
+                  </div>
                 </div>
                 <div className="flex items-center mt-1 min-w-0">
                   <span className="mr-1 flex-shrink-0">
