@@ -65,18 +65,8 @@ export default function DashboardLayout({
   const hasInitializedNotificationsRef = useRef(false);
   const notificationWrapRef = useRef<HTMLDivElement | null>(null);
 
-  if (status === 'loading') {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  if (status === 'unauthenticated') {
-    router.push('/auth/login');
-    return null;
-  }
+  const isLoading = status === 'loading';
+  const isUnauthenticated = status === 'unauthenticated';
 
   const pageTitle = PAGE_TITLES[pathname] || 'Dashboard';
 
@@ -209,6 +199,12 @@ export default function DashboardLayout({
   }, [status, session?.user?.tenantId]);
 
   useEffect(() => {
+    if (isUnauthenticated) {
+      router.push('/auth/login');
+    }
+  }, [isUnauthenticated, router]);
+
+  useEffect(() => {
     if (!notificationOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (!notificationWrapRef.current) return;
@@ -270,6 +266,18 @@ export default function DashboardLayout({
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (isUnauthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
