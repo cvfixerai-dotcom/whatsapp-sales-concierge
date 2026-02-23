@@ -43,13 +43,27 @@ class Logger {
           });
       }
 
-      // TODO: Send to external logging service (e.g., Sentry, LogRocket)
-      // if (process.env.SENTRY_DSN) {
-      //   Sentry.captureMessage(entry.message, {
-      //     level: entry.level,
-      //     extra: entry.data
-      //   });
-      // }
+      if (process.env.LOG_WEBHOOK_URL) {
+        try {
+          await fetch(process.env.LOG_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              level: entry.level,
+              message: entry.message,
+              data: entry.data,
+              timestamp: entry.timestamp,
+              user_id: entry.user_id,
+              tenant_id: entry.tenant_id,
+              conversation_id: entry.conversation_id,
+              request_id: entry.request_id,
+              source: 'app',
+            })
+          });
+        } catch (webhookError) {
+          console.error('Logger webhook error:', webhookError);
+        }
+      }
     } catch (error) {
       // Avoid infinite loops - don't log errors from the logger itself
       console.error('Logger error:', error);

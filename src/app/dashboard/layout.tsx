@@ -269,7 +269,7 @@ export default function DashboardLayout({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-transparent">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -280,30 +280,30 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="dashboard-shell min-h-screen text-foreground">
       {/* Top Navigation */}
-      <nav className="bg-white shadow-sm border-b sticky top-0 z-30">
+      <nav className="surface-strong border-b border-white/40 sticky top-0 z-30">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               {/* Mobile menu button */}
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="md:hidden p-2 rounded-md hover:bg-gray-100 mr-2"
+                className="md:hidden p-2 rounded-full hover:bg-white/70 mr-2"
               >
-                <Menu className="w-5 h-5 text-gray-600" />
+                <Menu className="w-5 h-5 text-muted" />
               </button>
-              <h1 className="text-xl font-semibold text-gray-900">{pageTitle}</h1>
+              <h1 className="text-2xl font-display tracking-tight text-foreground">{pageTitle}</h1>
             </div>
             <div className="flex items-center space-x-4">
               <div className="relative" ref={notificationWrapRef}>
                 <button
                   type="button"
                   onClick={handleBellClick}
-                  className="relative p-2 rounded-md hover:bg-gray-100"
+                  className="relative p-2 rounded-full hover:bg-white/70"
                   aria-label="Notifications"
                 >
-                  <Bell className="w-5 h-5 text-gray-600" />
+                  <Bell className="w-5 h-5 text-muted" />
                   {notificationCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-semibold rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center">
                       {notificationCount > 99 ? '99+' : notificationCount}
@@ -311,24 +311,24 @@ export default function DashboardLayout({
                   )}
                 </button>
                 {notificationOpen && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <div className="absolute right-0 mt-2 w-80 surface-strong rounded-2xl border border-white/60 shadow-2xl z-50">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/50">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">Notifications</p>
-                        <p className="text-xs text-gray-500">Unread conversations</p>
+                        <p className="text-sm font-semibold text-foreground">Notifications</p>
+                        <p className="text-xs text-muted">Unread conversations</p>
                       </div>
                       <button
                         type="button"
                         onClick={markAllRead}
                         disabled={unreadConversations.length === 0}
-                        className="text-xs font-medium text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+                        className="text-xs font-medium text-primary hover:text-primary/80 disabled:text-muted"
                       >
                         Mark all read
                       </button>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
                       {unreadConversations.length === 0 ? (
-                        <div className="px-4 py-6 text-sm text-gray-500 text-center">
+                        <div className="px-4 py-6 text-sm text-muted text-center">
                           No unread messages.
                         </div>
                       ) : (
@@ -337,18 +337,18 @@ export default function DashboardLayout({
                             key={conv.id}
                             type="button"
                             onClick={() => markConversationRead(conv)}
-                            className="w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50"
+                            className="w-full text-left px-4 py-3 border-b border-white/50 hover:bg-white/60"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">
+                                <p className="text-sm font-medium text-foreground truncate">
                                   {conv.contact_name || conv.contact_phone || 'Unknown'}
                                 </p>
-                                <p className="text-xs text-gray-500 truncate">
+                                <p className="text-xs text-muted truncate">
                                   {conv.last_message || 'New inbound message'}
                                 </p>
                               </div>
-                              <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                              <span className="text-[11px] text-soft whitespace-nowrap">
                                 {formatTimeAgo(conv.last_message_time)}
                               </span>
                             </div>
@@ -363,7 +363,7 @@ export default function DashboardLayout({
                           setNotificationOpen(false);
                           router.push('/dashboard/conversations');
                         }}
-                        className="w-full px-4 py-2 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        className="w-full px-4 py-2 text-xs font-semibold text-primary hover:text-primary/80 hover:bg-white/70"
                       >
                         View all conversations
                       </button>
@@ -371,10 +371,10 @@ export default function DashboardLayout({
                   </div>
                 )}
               </div>
-              <a href="/dashboard/settings" className="p-2 rounded-md hover:bg-gray-100">
-                <Settings className="w-5 h-5 text-gray-600" />
+              <a href="/dashboard/settings" className="p-2 rounded-full hover:bg-white/70">
+                <Settings className="w-5 h-5 text-muted" />
               </a>
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-semibold shadow-sm">
                 {session?.user?.name?.[0]?.toUpperCase() || '?'}
               </div>
             </div>
@@ -394,7 +394,7 @@ export default function DashboardLayout({
         {/* Sidebar */}
         <aside
           className={`
-            fixed md:sticky inset-y-0 md:top-16 left-0 z-50 md:z-10 w-64 bg-white shadow-sm md:h-[calc(100vh-4rem)] md:min-h-0
+            fixed md:sticky inset-y-0 md:top-16 left-0 z-50 md:z-10 w-64 surface-strong border-r border-white/40 md:h-[calc(100vh-4rem)] md:min-h-0
             transform transition-transform duration-200 ease-in-out
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             md:translate-x-0
@@ -402,12 +402,12 @@ export default function DashboardLayout({
         >
           {/* Mobile close button */}
           <div className="flex items-center justify-between px-4 pt-4 md:hidden">
-            <span className="text-sm font-semibold text-gray-900">Menu</span>
+            <span className="text-sm font-semibold text-foreground">Menu</span>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="p-1 rounded-md hover:bg-gray-100"
+              className="p-1 rounded-full hover:bg-white/70"
             >
-              <X className="w-5 h-5 text-gray-600" />
+              <X className="w-5 h-5 text-muted" />
             </button>
           </div>
 
@@ -421,10 +421,10 @@ export default function DashboardLayout({
                     key={item.href}
                     href={item.href}
                     onClick={() => setSidebarOpen(false)}
-                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md mt-1 ${
+                    className={`group flex items-center px-3 py-2 text-sm font-medium rounded-xl mt-1 transition-all ${
                       active
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-white/70 text-foreground shadow-sm'
+                        : 'text-muted hover:bg-white/60 hover:text-foreground'
                     }`}
                   >
                     <Icon className="mr-3 h-5 w-5" />
@@ -434,10 +434,10 @@ export default function DashboardLayout({
               })}
             </div>
 
-            <div className="border-t border-gray-200 pt-4 pb-4">
+            <div className="border-t border-white/40 pt-4 pb-4">
               <button
                 onClick={() => signOut({ callbackUrl: '/auth/login' })}
-                className="text-gray-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full"
+                className="text-muted hover:bg-red-50/80 hover:text-red-600 group flex items-center px-3 py-2 text-sm font-medium rounded-xl w-full transition-all"
               >
                 <LogOut className="mr-3 h-5 w-5" />
                 Sign Out
@@ -447,7 +447,7 @@ export default function DashboardLayout({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 min-w-0 overflow-x-hidden">
+        <main className="flex-1 p-6 min-w-0 overflow-x-hidden text-foreground">
           {children}
         </main>
       </div>

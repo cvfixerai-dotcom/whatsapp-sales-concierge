@@ -19,6 +19,7 @@ export const env = {
   // Twilio
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+  TWILIO_WEBHOOK_URL: process.env.TWILIO_WEBHOOK_URL || '',
   
   // Stripe
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
@@ -32,6 +33,9 @@ export const env = {
   // Resend
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || '',
+
+  // Logging
+  LOG_WEBHOOK_URL: process.env.LOG_WEBHOOK_URL || '',
   
   // Calendly
   CALENDLY_API_KEY: process.env.CALENDLY_API_KEY || '',

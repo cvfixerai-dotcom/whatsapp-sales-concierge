@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
+import { env } from '@/lib/env';
 import { twilioService } from '@/lib/services/twilio';
 import { aiAgent } from '@/lib/ai/agent';
 import { autoExtractAndSave, extractBudgetHints, extractTimelineHints } from '@/lib/ai/auto-extract';
@@ -29,8 +30,14 @@ export async function POST(request: NextRequest) {
 
     log(`Received: from=${fromNumber} to=${toNumber} body="${messageBody.substring(0, 50)}" sid=${messageSid}`);
 
-    // 2. Skip signature verification for now — production URL behind proxy
-    //    causes mismatch with Twilio's computed signature. TODO: use TWILIO_WEBHOOK_URL env var.
+    // 2. Verify Twilio signature (use TWILIO_WEBHOOK_URL in production to avoid proxy mismatch)
+    const signature = request.headers.get('x-twilio-signature') || '';
+    const webhookUrl = env.TWILIO_WEBHOOK_URL || request.url;
+    const isValidSignature = twilioService.verifyWebhookSignature(signature, webhookUrl, webhookData);
+    if (!isValidSignature) {
+      logErr('Invalid Twilio signature');
+      return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 403 });
+    }
     
     // 3. Find tenant by WhatsApp number
     const tenantId = await twilioService.getTenantByWhatsAppNumber(toNumber);

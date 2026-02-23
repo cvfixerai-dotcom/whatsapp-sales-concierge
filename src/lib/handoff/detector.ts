@@ -293,18 +293,34 @@ export async function getHandoffStats(tenantId: string): Promise<{
   try {
     const { data, error } = await supabaseAdmin
       .from('conversations')
-      .select('status, handoff_requested_at, handoff_resolved_at')
+      .select('status, handoff_requested_at, handoff_claimed_at, handoff_resolved_at')
       .eq('tenant_id', tenantId)
       .in('status', ['handoff-requested', 'human-handled', 'resolved']);
     
     if (error) throw error;
     
+    const responseTimes = (data || [])
+      .map((conversation) => {
+        const requestedAt = conversation.handoff_requested_at;
+        const claimedAt = conversation.handoff_claimed_at || conversation.handoff_resolved_at;
+
+        if (!requestedAt || !claimedAt) return null;
+
+        const diffMinutes = (new Date(claimedAt).getTime() - new Date(requestedAt).getTime()) / 60000;
+        return diffMinutes >= 0 ? diffMinutes : null;
+      })
+      .filter((value) => typeof value === 'number') as number[];
+
+    const avgResponseTime = responseTimes.length
+      ? Math.round(responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length)
+      : 0;
+
     const stats = {
       total: data?.length || 0,
       pending: data?.filter(c => c.status === 'handoff-requested').length || 0,
       inProgress: data?.filter(c => c.status === 'human-handled').length || 0,
       resolved: data?.filter(c => c.status === 'resolved').length || 0,
-      avgResponseTime: 0 // TODO: Calculate average response time
+      avgResponseTime
     };
     
     return stats;
