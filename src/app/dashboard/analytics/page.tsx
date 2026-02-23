@@ -6,8 +6,6 @@ import { useSession } from 'next-auth/react';
 import { StatsSkeleton, ChartSkeleton } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
 import {
-  LineChart,
-  Line,
   PieChart,
   Pie,
   BarChart,
@@ -22,21 +20,14 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { supabase } from '@/lib/supabase-client';
 import {
   TrendingUp,
-  TrendingDown,
   Users,
   MessageSquare,
   Calendar,
   Clock,
   Target,
-  Activity,
   Settings,
-  Download,
-  UserPlus,
-  CreditCard,
-  LogOut,
 } from 'lucide-react';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -50,14 +41,22 @@ export default function AnalyticsPage() {
     totalConversations: 0,
     totalLeads: 0,
     totalAppointments: 0,
+    qualifiedLeads: 0,
     conversionRate: 0,
     avgResponseTime: 0,
     handoffRate: 0,
   });
+  const [funnel, setFunnel] = useState({
+    conversations: 0,
+    qualified: 0,
+    booked: 0,
+  });
   const [conversationTrend, setConversationTrend] = useState<any[]>([]);
   const [temperatureData, setTemperatureData] = useState<any[]>([]);
-  const [sourceData, setSourceData] = useState<any[]>([]);
+  const [leadScoreData, setLeadScoreData] = useState<any[]>([]);
   const [hourlyData, setHourlyData] = useState<any[]>([]);
+  const [conversionByTemperature, setConversionByTemperature] = useState<any[]>([]);
+  const [responseCoverage, setResponseCoverage] = useState(0);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -67,108 +66,39 @@ export default function AnalyticsPage() {
     }
   }, [status, session, period]);
 
-  const getPeriodDays = () => {
-    switch (period) {
-      case '7d': return 7;
-      case '30d': return 30;
-      case '90d': return 90;
-    }
-  };
-
   const fetchAnalytics = async () => {
     if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);
-      const days = getPeriodDays();
-      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const response = await fetch(`/api/analytics?period=${period}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch analytics');
+      }
 
-      const [convResult, leadsResult, appointmentsResult, handoffsResult] = await Promise.all([
-        supabase
-          .from('conversations')
-          .select('id, created_at, status')
-          .eq('tenant_id', session.user.tenantId)
-          .gte('created_at', since),
-        supabase
-          .from('contacts')
-          .select('id, temperature, created_at, lead_score')
-          .eq('tenant_id', session.user.tenantId),
-        supabase
-          .from('appointments')
-          .select('id, status, created_at')
-          .eq('tenant_id', session.user.tenantId)
-          .gte('created_at', since),
-        supabase
-          .from('conversations')
-          .select('id')
-          .eq('tenant_id', session.user.tenantId)
-          .eq('status', 'handoff-requested')
-          .gte('created_at', since),
-      ]);
-
-      const conversations = convResult.data || [];
-      const leads = leadsResult.data || [];
-      const appointments = appointmentsResult.data || [];
-      const handoffs = handoffsResult.data || [];
-
-      const totalConversations = conversations.length;
-      const totalLeads = leads.length;
-      const totalAppointments = appointments.length;
-      const conversionRate = totalLeads > 0 ? Math.round((totalAppointments / totalLeads) * 100) : 0;
-      const handoffRate = totalConversations > 0 ? Math.round((handoffs.length / totalConversations) * 100) : 0;
+      const data = await response.json();
+      const statsData = data?.stats || {};
 
       setStats({
-        totalConversations,
-        totalLeads,
-        totalAppointments,
-        conversionRate,
-        avgResponseTime: 0,
-        handoffRate,
+        totalConversations: statsData.totalConversations || 0,
+        totalLeads: statsData.totalLeads || 0,
+        totalAppointments: statsData.totalAppointments || 0,
+        qualifiedLeads: statsData.qualifiedLeads || 0,
+        conversionRate: statsData.conversionRate || 0,
+        avgResponseTime: statsData.avgResponseTime || 0,
+        handoffRate: statsData.handoffRate || 0,
       });
-
-      // Conversation trend
-      const trendMap: Record<string, number> = {};
-      conversations.forEach(conv => {
-        const date = new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        trendMap[date] = (trendMap[date] || 0) + 1;
+      setFunnel({
+        conversations: data?.funnel?.conversations || 0,
+        qualified: data?.funnel?.qualified || 0,
+        booked: data?.funnel?.booked || 0,
       });
-      setConversationTrend(
-        Object.entries(trendMap).map(([date, count]) => ({ date, conversations: count }))
-      );
-
-      // Temperature distribution
-      const tempMap: Record<string, number> = {};
-      leads.forEach(lead => {
-        const temp = lead.temperature || 'new';
-        tempMap[temp] = (tempMap[temp] || 0) + 1;
-      });
-      setTemperatureData(
-        Object.entries(tempMap).map(([name, value]) => ({ name, value }))
-      );
-
-      // Score distribution
-      const scoreRanges = { 'High (70-100)': 0, 'Medium (40-69)': 0, 'Low (0-39)': 0 };
-      leads.forEach(lead => {
-        const score = lead.lead_score || 0;
-        if (score >= 70) scoreRanges['High (70-100)']++;
-        else if (score >= 40) scoreRanges['Medium (40-69)']++;
-        else scoreRanges['Low (0-39)']++;
-      });
-      setSourceData(
-        Object.entries(scoreRanges).map(([name, value]) => ({ name, value }))
-      );
-
-      // Hourly distribution
-      const hourMap: Record<number, number> = {};
-      conversations.forEach(conv => {
-        const hour = new Date(conv.created_at).getHours();
-        hourMap[hour] = (hourMap[hour] || 0) + 1;
-      });
-      const hourlyArr = [];
-      for (let i = 0; i < 24; i++) {
-        hourlyArr.push({ hour: `${i}:00`, conversations: hourMap[i] || 0 });
-      }
-      setHourlyData(hourlyArr);
+      setConversationTrend(data?.conversationTrend || []);
+      setTemperatureData(data?.temperatureDistribution || []);
+      setLeadScoreData(data?.leadScoreDistribution || []);
+      setHourlyData(data?.hourlyActivity || []);
+      setConversionByTemperature(data?.conversionByTemperature || []);
+      setResponseCoverage(data?.responseCoverage || 0);
 
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -177,11 +107,40 @@ export default function AnalyticsPage() {
     }
   };
 
+  const qualifiedRate = funnel.conversations
+    ? Math.round((funnel.qualified / funnel.conversations) * 100)
+    : 0;
+  const bookedRate = funnel.qualified
+    ? Math.round((funnel.booked / funnel.qualified) * 100)
+    : 0;
+  const overallBookedRate = funnel.conversations
+    ? Math.round((funnel.booked / funnel.conversations) * 100)
+    : 0;
+  const responseTimeLabel = responseCoverage ? `${stats.avgResponseTime} min` : '—';
+  const responseCoverageLabel = responseCoverage
+    ? `${responseCoverage} conversations`
+    : 'Awaiting responses';
+
+  const renderConversionTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0]?.payload;
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-2 text-xs shadow">
+        <div className="font-medium text-gray-900">{label}</div>
+        <div className="mt-1 text-gray-500">Leads: {data?.leads ?? 0}</div>
+        <div className="text-gray-500">Booked: {data?.booked ?? 0}</div>
+        <div className="text-gray-500">Conversion: {data?.conversionRate ?? 0}%</div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
-        <StatsSkeleton count={5} />
+        <StatsSkeleton count={6} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ChartSkeleton />
+          <ChartSkeleton />
           <ChartSkeleton />
           <ChartSkeleton />
           <ChartSkeleton />
@@ -251,6 +210,7 @@ export default function AnalyticsPage() {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Total Leads</p>
                   <p className="text-2xl font-semibold text-gray-900">{stats.totalLeads}</p>
+                  <p className="text-xs text-gray-400">Qualified: {stats.qualifiedLeads}</p>
                 </div>
               </div>
             </div>
@@ -278,6 +238,18 @@ export default function AnalyticsPage() {
             </div>
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
+                <div className="bg-indigo-500 p-3 rounded-full text-white">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Avg Response Time</p>
+                  <p className="text-2xl font-semibold text-gray-900">{responseTimeLabel}</p>
+                  <p className="text-xs text-gray-400">{responseCoverageLabel}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center">
                 <div className="bg-red-500 p-3 rounded-full text-white">
                   <TrendingUp className="w-5 h-5" />
                 </div>
@@ -285,6 +257,59 @@ export default function AnalyticsPage() {
                   <p className="text-sm font-medium text-gray-500">Handoff Rate</p>
                   <p className="text-2xl font-semibold text-gray-900">{stats.handoffRate}%</p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Funnel Overview */}
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Conversation Funnel</h3>
+                <p className="text-sm text-gray-500">Conversations → Qualified → Booked</p>
+              </div>
+              <div className="text-sm text-gray-500">
+                Overall conversion: <span className="font-semibold text-gray-900">{overallBookedRate}%</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-500">Conversations</p>
+                  <span className="text-sm text-gray-400">100%</span>
+                </div>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{funnel.conversations}</p>
+                <div className="mt-3 h-2 rounded-full bg-blue-100">
+                  <div className="h-2 rounded-full bg-blue-500" style={{ width: '100%' }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-500">Qualified</p>
+                  <span className="text-sm text-gray-400">{qualifiedRate}%</span>
+                </div>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{funnel.qualified}</p>
+                <div className="mt-3 h-2 rounded-full bg-emerald-100">
+                  <div
+                    className="h-2 rounded-full bg-emerald-500"
+                    style={{ width: `${qualifiedRate}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-2">{qualifiedRate}% of conversations</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-500">Booked</p>
+                  <span className="text-sm text-gray-400">{bookedRate}%</span>
+                </div>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{funnel.booked}</p>
+                <div className="mt-3 h-2 rounded-full bg-purple-100">
+                  <div
+                    className="h-2 rounded-full bg-purple-500"
+                    style={{ width: `${overallBookedRate}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-2">{bookedRate}% of qualified leads</p>
               </div>
             </div>
           </div>
@@ -330,18 +355,40 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-6 mt-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Conversion by Temperature</h3>
+                  <p className="text-sm text-gray-500">Booked vs total leads per temperature</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={conversionByTemperature} barGap={12}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="temperature" />
+                  <YAxis />
+                  <Tooltip content={renderConversionTooltip} />
+                  <Legend />
+                  <Bar dataKey="leads" name="Leads" fill="#60A5FA" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="booked" name="Booked" fill="#34D399" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Lead Score Distribution */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Lead Score Distribution</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={sourceData}>
+                <BarChart data={leadScoreData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
                   <Bar dataKey="value" fill="#10B981">
-                    {sourceData.map((_, index) => (
+                    {leadScoreData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Bar>

@@ -10,26 +10,14 @@ import { supabase } from '@/lib/supabase-client';
 import {
   UserPlus,
   Clock,
-  User,
-  AlertCircle,
   CheckCircle,
-  XCircle,
-  MessageSquare,
-  Phone,
-  Mail,
-  Calendar,
   Filter,
   RefreshCw,
   Eye,
   UserCheck,
-  ArrowRight,
   AlertTriangle,
-  Activity,
   Users,
-  TrendingUp,
-  Settings,
-  CreditCard,
-  LogOut,
+  Activity,
 } from 'lucide-react';
 
 interface HandoffRequest {
@@ -50,6 +38,7 @@ interface HandoffRequest {
   resolution?: string;
   notes?: string;
   escalated: boolean;
+  response_time_minutes?: number | null;
 }
 
 interface HandoffStats {
@@ -73,11 +62,14 @@ const statusColors = {
   resolved: 'bg-green-100 text-green-800',
 };
 
+const DEFAULT_PERIOD = '30d';
+
 export default function HandoffsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   
   const [loading, setLoading] = useState(true);
+  const [handoffQueue, setHandoffQueue] = useState<HandoffRequest[]>([]);
   const [handoffs, setHandoffs] = useState<HandoffRequest[]>([]);
   const [stats, setStats] = useState<HandoffStats>({
     total: 0,
@@ -95,7 +87,7 @@ export default function HandoffsPage() {
   
   // Modal states
   const [selectedHandoff, setSelectedHandoff] = useState<HandoffRequest | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [resolutionType, setResolutionType] = useState<'resolved' | 'returned_to_ai'>('resolved');
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [showResolveModal, setShowResolveModal] = useState(false);
 
@@ -104,125 +96,42 @@ export default function HandoffsPage() {
       router.push('/auth/login');
     } else if (status === 'authenticated' && session?.user?.tenantId) {
       fetchHandoffs();
-      fetchStats();
       setupRealtimeSubscription();
     }
 
     return () => {
       supabase.channel('handoffs-updates').unsubscribe();
     };
-  }, [status, session, statusFilter, severityFilter, searchQuery]);
+  }, [status, session]);
+
+  useEffect(() => {
+    setHandoffs(applyFilters(handoffQueue));
+  }, [handoffQueue, statusFilter, severityFilter, searchQuery]);
 
   const fetchHandoffs = async () => {
     if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);
-      
-      let query = supabase
-        .from('conversations')
-        .select(`
-          id,
-          status,
-          handoff_reason,
-          handoff_requested_at,
-          handoff_claimed_at,
-          handoff_claimed_by,
-          handoff_resolved_at,
-          handoff_resolution,
-          handoff_notes,
-          handoff_triggers,
-          handoff_escalated,
-          contacts(name, whatsapp_number, email),
-          users!handoff_claimed_by(name)
-        `)
-        .eq('tenant_id', session.user.tenantId)
-        .in('status', ['handoff-requested', 'human-handled', 'resolved'])
-        .order('handoff_requested_at', { ascending: false });
-
-      // Apply filters
-      if (statusFilter !== 'all') {
-        const statusMap = {
-          pending: 'handoff-requested',
-          'in-progress': 'human-handled',
-          resolved: 'resolved'
-        };
-        query = query.eq('status', statusMap[statusFilter as keyof typeof statusMap]);
+      const response = await fetch(`/api/handoffs/queue?period=${DEFAULT_PERIOD}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch handoffs');
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Transform data
-      const transformedData: HandoffRequest[] = (data || []).map(conv => ({
-        id: conv.id,
-        conversation_id: conv.id,
-        contact_name: conv.contacts?.name || 'Unknown',
-        contact_phone: conv.contacts?.whatsapp_number || '',
-        contact_email: conv.contacts?.email,
-        reason: conv.handoff_reason || 'No reason provided',
-        severity: determineSeverity(conv.handoff_triggers, conv.handoff_escalated),
-        status: conv.status === 'handoff-requested' ? 'pending' :
-                conv.status === 'human-handled' ? 'in-progress' : 'resolved',
-        triggers: conv.handoff_triggers || [],
-        requested_at: conv.handoff_requested_at,
-        claimed_at: conv.handoff_claimed_at,
-        claimed_by: conv.handoff_claimed_by,
-        claimed_by_name: conv.users?.name,
-        resolved_at: conv.handoff_resolved_at,
-        resolution: conv.handoff_resolution,
-        notes: conv.handoff_notes,
-        escalated: conv.handoff_escalated || false,
-      }));
-
-      // Apply search filter
-      let filteredData = transformedData;
-      if (searchQuery) {
-        filteredData = transformedData.filter(handoff =>
-          handoff.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          handoff.contact_phone.includes(searchQuery) ||
-          handoff.reason.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-
-      // Apply severity filter
-      if (severityFilter !== 'all') {
-        filteredData = filteredData.filter(h => h.severity === severityFilter);
-      }
-
-      setHandoffs(filteredData);
+      const data = await response.json();
+      setHandoffQueue(data?.handoffs || []);
+      setStats({
+        total: data?.stats?.total || 0,
+        pending: data?.stats?.pending || 0,
+        inProgress: data?.stats?.inProgress || 0,
+        resolved: data?.stats?.resolved || 0,
+        avgResponseTime: data?.stats?.avgResponseTime || 0,
+        escalatedCount: data?.stats?.escalatedCount || 0,
+      });
     } catch (error) {
       console.error('Error fetching handoffs:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchStats = async () => {
-    if (!session?.user?.tenantId) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .select('status, handoff_requested_at, handoff_claimed_at, handoff_escalated')
-        .eq('tenant_id', session.user.tenantId)
-        .in('status', ['handoff-requested', 'human-handled', 'resolved']);
-
-      if (error) throw error;
-
-      const stats: HandoffStats = {
-        total: data?.length || 0,
-        pending: data?.filter(c => c.status === 'handoff-requested').length || 0,
-        inProgress: data?.filter(c => c.status === 'human-handled').length || 0,
-        resolved: data?.filter(c => c.status === 'resolved').length || 0,
-        avgResponseTime: calculateAvgResponseTime(data || []),
-        escalatedCount: data?.filter(c => c.handoff_escalated).length || 0,
-      };
-
-      setStats(stats);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
     }
   };
 
@@ -241,34 +150,33 @@ export default function HandoffsPage() {
               payload.new?.status === 'human-handled' ||
               payload.new?.status === 'resolved') {
             fetchHandoffs();
-            fetchStats();
           }
         }
       )
       .subscribe();
   };
 
-  const determineSeverity = (triggers: string[], escalated: boolean): 'low' | 'medium' | 'high' => {
-    if (escalated) return 'high';
-    if (!triggers || triggers.length === 0) return 'low';
-    
-    const highSeverityTriggers = ['high_value_lead', 'keyword_match', 'negative_sentiment', 'urgent_timeline'];
-    const hasHighSeverity = triggers.some(t => highSeverityTriggers.includes(t));
-    
-    return hasHighSeverity ? 'high' : 'medium';
-  };
+  const applyFilters = (items: HandoffRequest[]) => {
+    let filtered = [...items];
 
-  const calculateAvgResponseTime = (data: any[]): number => {
-    const resolvedHandoffs = data.filter(c => c.handoff_claimed_at && c.handoff_requested_at);
-    if (resolvedHandoffs.length === 0) return 0;
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((handoff) => handoff.status === statusFilter);
+    }
 
-    const totalTime = resolvedHandoffs.reduce((sum, handoff) => {
-      const requested = new Date(handoff.handoff_requested_at);
-      const claimed = new Date(handoff.handoff_claimed_at);
-      return sum + (claimed.getTime() - requested.getTime());
-    }, 0);
+    if (severityFilter !== 'all') {
+      filtered = filtered.filter((handoff) => handoff.severity === severityFilter);
+    }
 
-    return Math.round(totalTime / resolvedHandoffs.length / 1000 / 60); // in minutes
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((handoff) =>
+        handoff.contact_name.toLowerCase().includes(query) ||
+        handoff.contact_phone.includes(query) ||
+        handoff.reason.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
   };
 
   const handleClaimHandoff = async (handoffId: string) => {
@@ -287,7 +195,6 @@ export default function HandoffsPage() {
       if (!response.ok) throw new Error('Failed to claim handoff');
 
       fetchHandoffs();
-      fetchStats();
     } catch (error) {
       console.error('Error claiming handoff:', error);
       toast.error('Failed to claim handoff');
@@ -298,7 +205,7 @@ export default function HandoffsPage() {
     router.push(`/dashboard/conversations/${handoffId}`);
   };
 
-  const handleResolveHandoff = async (resolution: 'resolved' | 'returned_to_ai') => {
+  const handleResolveHandoff = async () => {
     if (!selectedHandoff) return;
 
     try {
@@ -309,7 +216,7 @@ export default function HandoffsPage() {
         },
         body: JSON.stringify({
           conversationId: selectedHandoff.conversation_id,
-          resolution,
+          resolution: resolutionType,
           notes: resolutionNotes,
         }),
       });
@@ -317,10 +224,10 @@ export default function HandoffsPage() {
       if (!response.ok) throw new Error('Failed to resolve handoff');
 
       setShowResolveModal(false);
+      setResolutionType('resolved');
       setResolutionNotes('');
       setSelectedHandoff(null);
       fetchHandoffs();
-      fetchStats();
     } catch (error) {
       console.error('Error resolving handoff:', error);
       toast.error('Failed to resolve handoff');
@@ -330,7 +237,7 @@ export default function HandoffsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <StatsSkeleton count={5} />
+        <StatsSkeleton count={6} />
         <TableSkeleton rows={4} />
       </div>
     );
@@ -343,7 +250,6 @@ export default function HandoffsPage() {
             <button
               onClick={() => {
                 fetchHandoffs();
-                fetchStats();
               }}
               className="p-2 rounded-md hover:bg-gray-100"
             >
@@ -352,7 +258,7 @@ export default function HandoffsPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
                 <div className="p-3 bg-blue-100 rounded-full">
@@ -361,6 +267,20 @@ export default function HandoffsPage() {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Total</p>
                   <p className="text-2xl font-semibold text-gray-900">{stats.total}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-indigo-100 rounded-full">
+                  <Activity className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Avg Response</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {stats.avgResponseTime ? `${stats.avgResponseTime} min` : '—'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -516,7 +436,10 @@ export default function HandoffsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(handoff.requested_at).toLocaleString()}
+                        <div>{new Date(handoff.requested_at).toLocaleString()}</div>
+                        {handoff.response_time_minutes != null && (
+                          <div className="text-xs text-gray-400">Response: {handoff.response_time_minutes} min</div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {handoff.claimed_by_name || '-'}
@@ -545,6 +468,8 @@ export default function HandoffsPage() {
                             <button
                               onClick={() => {
                                 setSelectedHandoff(handoff);
+                                setResolutionType('resolved');
+                                setResolutionNotes('');
                                 setShowResolveModal(true);
                               }}
                               className="text-gray-600 hover:text-gray-900"
@@ -596,7 +521,8 @@ export default function HandoffsPage() {
                       type="radio"
                       name="resolution"
                       value="resolved"
-                      onChange={(e) => setResolutionNotes(e.target.value)}
+                      checked={resolutionType === 'resolved'}
+                      onChange={() => setResolutionType('resolved')}
                       className="mr-2"
                     />
                     <span className="text-sm">Resolved - Customer issue was resolved</span>
@@ -606,7 +532,8 @@ export default function HandoffsPage() {
                       type="radio"
                       name="resolution"
                       value="returned_to_ai"
-                      onChange={(e) => setResolutionNotes(e.target.value)}
+                      checked={resolutionType === 'returned_to_ai'}
+                      onChange={() => setResolutionType('returned_to_ai')}
                       className="mr-2"
                     />
                     <span className="text-sm">Return to AI - Hand back to AI assistant</span>
@@ -620,6 +547,8 @@ export default function HandoffsPage() {
                 </label>
                 <textarea
                   rows={3}
+                  value={resolutionNotes}
+                  onChange={(event) => setResolutionNotes(event.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="Add any notes about the resolution..."
                 />
@@ -630,6 +559,7 @@ export default function HandoffsPage() {
                   onClick={() => {
                     setShowResolveModal(false);
                     setSelectedHandoff(null);
+                    setResolutionType('resolved');
                     setResolutionNotes('');
                   }}
                   className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
@@ -637,10 +567,7 @@ export default function HandoffsPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    const resolution = resolutionNotes === 'returned_to_ai' ? 'returned_to_ai' : 'resolved';
-                    handleResolveHandoff(resolution);
-                  }}
+                  onClick={() => handleResolveHandoff()}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 >
                   Resolve
