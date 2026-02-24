@@ -61,17 +61,18 @@ export async function bookAppointment({
     const companyName = tenant.company_name || 'Our Team';
 
     // Use in-app booking only
-    const bookingResult = await bookSlot(
+    const bookingResult = await bookSlot({
       tenantId,
-      slotTime,
-      {
-        contactId,
-        conversationId,
-        customerName: inviteeName,
-        customerEmail: inviteeEmail,
-        customerPhone: contact.whatsapp_number,
-      }
-    );
+      scheduledAt: slotTime,
+      contactId,
+      conversationId,
+      customerName: inviteeName,
+      customerEmail: inviteeEmail,
+      customerPhone: contact.whatsapp_number,
+      duration: 30,
+      appointmentType: 'consultation',
+      bookedVia: 'whatsapp',
+    });
 
     if (!bookingResult.success) {
       console.error('[Tool: bookAppointment] Booking failed:', bookingResult.error);
@@ -89,7 +90,7 @@ export async function bookAppointment({
         metadata: {
           last_booking_at: new Date().toISOString(),
           calendar_provider: 'inapp',
-          appointment_id: bookingResult.appointmentId,
+          appointment_id: bookingResult.appointment?.id,
         }
       },
     });
