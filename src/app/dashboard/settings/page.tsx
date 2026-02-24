@@ -554,10 +554,22 @@ function SettingsPageContent() {
 
           <div className="p-6">
             {/* Provider Selection */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Choose your calendar provider
-              </label>
+            <div>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">In-App Calendar Active</h3>
+                    <p className="text-sm text-gray-600">
+                      Your calendar is managed directly within the dashboard. Configure availability in the Calendar tab.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Hidden calendar provider options */}
+            <div className="hidden">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Calendly Option */}
                 <button
@@ -743,28 +755,16 @@ function SettingsPageContent() {
         </div>
 
         {/* Current Status */}
-        {settings && (
-          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Current Configuration</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">Active Provider:</span>
-                <span className="ml-2 font-medium text-gray-900">
-                  {settings.calendar_provider === 'google'
-                    ? 'Google Calendar'
-                    : settings.calendar_provider === 'calendly'
-                    ? 'Calendly'
-                    : 'Not configured'}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500">Status:</span>
-                <span
-                  className={`ml-2 font-medium ${
-                    settings.calendar_provider ? 'text-green-600' : 'text-yellow-600'
-                  }`}
-                >
-                  {settings.calendar_provider ? 'Connected' : 'Not connected'}
+        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">Current Configuration</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Active Provider:</span>
+              <span className="ml-2 font-medium text-gray-900">In-App Calendar</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Status:</span>
+              <span className="ml-2 font-medium text-green-600">Active
                 </span>
               </div>
             </div>

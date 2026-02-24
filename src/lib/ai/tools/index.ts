@@ -2,6 +2,7 @@
 export { updateLead } from './update-lead';
 export { checkCalendar } from './check-calendar';
 export { bookAppointment } from './book-appointment';
+export { cancelAppointment } from './cancel-appointment';
 export { sendEmail } from './send-email';
 export { calculateLeadScore, getMessageCount, hasAppointment } from './calculate-score';
 
@@ -53,6 +54,19 @@ export const AI_TOOLS = {
       required: ['slotTime'],
     },
     handler: 'bookAppointment',
+  },
+
+  cancel_appointment: {
+    name: 'cancel_appointment',
+    description: 'Cancel an existing appointment. Call this when the customer wants to cancel or reschedule their appointment.',
+    parameters: {
+      type: 'object',
+      properties: {
+        appointmentId: { type: 'string', description: 'Specific appointment ID to cancel (optional, will cancel most recent if not provided)' },
+      },
+      required: [],
+    },
+    handler: 'cancelAppointment',
   },
 
   send_email: {
