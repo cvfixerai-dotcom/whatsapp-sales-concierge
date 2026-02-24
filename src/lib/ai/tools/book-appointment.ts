@@ -128,28 +128,51 @@ export async function bookAppointment({
     }
 
     // Save to database
+    const appointmentPayload = {
+      tenant_id: tenantId,
+      contact_id: contactId,
+      conversation_id: conversationId,
+      calendar_provider: usedExternalCalendar ? provider : 'inapp',
+      calendar_event_id: eventId,
+      scheduled_time: meetingTime,
+      duration: 30,
+      duration_minutes: 30,
+      meeting_link: meetingLink || null,
+      status: 'scheduled',
+      customer_name: inviteeName,
+      customer_phone: contact.whatsapp_number,
+      customer_email: contact.email || null,
+      booked_via: 'whatsapp',
+      created_at: new Date().toISOString(),
+    };
+
     const { error: dbError } = await supabaseAdmin
       .from('appointments')
-      .insert({
-        tenant_id: tenantId,
-        contact_id: contactId,
-        conversation_id: conversationId,
-        calendar_provider: usedExternalCalendar ? provider : 'inapp',
-        calendar_event_id: eventId,
-        scheduled_time: meetingTime,
-        duration: 30,
-        meeting_link: meetingLink || null,
-        status: 'scheduled',
-        customer_name: inviteeName,
-        customer_phone: contact.whatsapp_number,
-        customer_email: contact.email || null,
-        booked_via: 'whatsapp',
-        created_at: new Date().toISOString(),
-      });
+      .insert(appointmentPayload);
 
     if (dbError) {
       console.error('[Tool: bookAppointment] Database insert failed:', dbError);
-      // Don't fail the booking if DB insert fails
+
+      const legacyPayload = {
+        tenant_id: tenantId,
+        contact_id: contactId,
+        conversation_id: conversationId,
+        calendly_event_id: provider === 'calendly' ? eventId : null,
+        scheduled_time: meetingTime,
+        duration_minutes: 30,
+        meeting_link: meetingLink || null,
+        status: 'scheduled',
+        created_at: new Date().toISOString(),
+      };
+
+      const { error: legacyError } = await supabaseAdmin
+        .from('appointments')
+        .insert(legacyPayload);
+
+      if (legacyError) {
+        console.error('[Tool: bookAppointment] Legacy insert failed:', legacyError);
+        return { success: false, error: 'Failed to record appointment.' };
+      }
     }
 
     // Update contact temperature to 'booked'

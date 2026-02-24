@@ -188,6 +188,7 @@ export interface Appointment {
   conversation_id: string | null;
   calendly_event_id: string | null;
   scheduled_time: string;
+  duration?: number;
   duration_minutes: number;
   meeting_link: string | null;
   meeting_type: string | null;

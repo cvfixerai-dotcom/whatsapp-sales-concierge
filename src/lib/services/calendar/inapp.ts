@@ -86,7 +86,7 @@ export async function getAvailableSlots(
   // Fetch booked appointments
   const { data: booked } = await supabaseAdmin
     .from('appointments')
-    .select('scheduled_time, duration')
+    .select('scheduled_time, duration, duration_minutes')
     .eq('tenant_id', tenantId)
     .in('status', ['scheduled', 'confirmed'])
     .gte('scheduled_time', start.toISOString())
@@ -250,6 +250,7 @@ export async function bookSlot(params: {
   conversationId?: string;
 }): Promise<{ success: boolean; appointment?: any; error?: string }> {
   const duration = params.duration || 30;
+  const eventId = `inapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   // Verify slot is still available
   const available = await isSlotAvailable(params.tenantId, params.scheduledAt, duration);
@@ -264,6 +265,7 @@ export async function bookSlot(params: {
       contact_id: params.contactId || null,
       scheduled_time: params.scheduledAt,
       duration: duration,
+      duration_minutes: duration,
       status: 'scheduled',
       customer_name: params.customerName,
       customer_phone: params.customerPhone,
@@ -273,14 +275,34 @@ export async function bookSlot(params: {
       booked_via: params.bookedVia || 'whatsapp',
       conversation_id: params.conversationId || null,
       calendar_provider: 'inapp',
-      calendar_event_id: `inapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      calendar_event_id: eventId,
     })
     .select()
     .single();
 
   if (error) {
     console.error('[InApp Calendar] Book error:', error);
-    return { success: false, error: error.message };
+
+    const { data: legacyAppointment, error: legacyError } = await supabaseAdmin
+      .from('appointments')
+      .insert({
+        tenant_id: params.tenantId,
+        contact_id: params.contactId || null,
+        conversation_id: params.conversationId || null,
+        scheduled_time: params.scheduledAt,
+        duration_minutes: duration,
+        status: 'scheduled',
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (legacyError) {
+      console.error('[InApp Calendar] Legacy book error:', legacyError);
+      return { success: false, error: legacyError.message };
+    }
+
+    return { success: true, appointment: legacyAppointment };
   }
 
   return { success: true, appointment };
