@@ -22,12 +22,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
     }
 
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid start or end date' }, { status: 400 });
+    }
+
+    // Expand range by 1 day to avoid timezone edge misses
+    const rangeStart = new Date(startDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const rangeEnd = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
     const { data, error } = await supabaseAdmin
       .from('appointments')
       .select(`*, contacts(name, whatsapp_number, email)`)
       .eq('tenant_id', session.user.tenantId)
-      .gte('scheduled_time', start)
-      .lte('scheduled_time', end)
+      .gte('scheduled_time', rangeStart)
+      .lte('scheduled_time', rangeEnd)
       .order('scheduled_time', { ascending: true });
 
     if (error) {
