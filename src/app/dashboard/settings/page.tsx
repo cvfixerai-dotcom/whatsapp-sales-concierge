@@ -764,12 +764,10 @@ function SettingsPageContent() {
             </div>
             <div>
               <span className="text-gray-500">Status:</span>
-              <span className="ml-2 font-medium text-green-600">Active
-                </span>
-              </div>
+              <span className="ml-2 font-medium text-green-600">Active</span>
             </div>
           </div>
-        )}
+        </div>
         </>
         )}
 
