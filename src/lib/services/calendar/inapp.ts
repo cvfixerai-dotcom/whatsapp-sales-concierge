@@ -13,6 +13,8 @@ export interface SlotResult {
   formatted: string;
   date: string;
   time: string;
+  dayName: string;
+  dateOnly: string;
 }
 
 export interface AvailabilitySettings {
@@ -175,7 +177,7 @@ export async function getAvailableSlots(
       slots.push({
         datetime: slotDate.toISOString(),
         formatted: slotDate.toLocaleString('en-US', {
-          weekday: 'short', month: 'short', day: 'numeric',
+          weekday: 'long', month: 'short', day: 'numeric',
           hour: 'numeric', minute: '2-digit', hour12: true,
           timeZone: timezone,
         }),
@@ -185,6 +187,14 @@ export async function getAvailableSlots(
         }),
         time: slotDate.toLocaleTimeString('en-US', {
           hour: 'numeric', minute: '2-digit', hour12: true,
+          timeZone: timezone,
+        }),
+        dayName: slotDate.toLocaleDateString('en-US', {
+          weekday: 'long',
+          timeZone: timezone,
+        }),
+        dateOnly: slotDate.toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric',
           timeZone: timezone,
         }),
       });

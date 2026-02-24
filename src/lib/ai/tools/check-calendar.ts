@@ -9,6 +9,8 @@ interface CheckCalendarParams {
 interface CalendarSlot {
   datetime: string;
   formatted: string;
+  dayName: string;
+  dateOnly: string;
 }
 
 export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarParams): Promise<{
@@ -26,7 +28,12 @@ export async function checkCalendar({ tenantId, preferredDate }: CheckCalendarPa
 
     return {
       success: true,
-      available_slots: slots.map(s => ({ datetime: s.datetime, formatted: s.formatted })),
+      available_slots: slots.map(s => ({ 
+        datetime: s.datetime, 
+        formatted: s.formatted,
+        dayName: s.dayName,
+        dateOnly: s.dateOnly,
+      })),
     };
   } catch (error) {
     console.error('[Tool: checkCalendar] Error:', error);
