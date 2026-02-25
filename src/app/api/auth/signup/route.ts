@@ -131,9 +131,14 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('[Signup] Unexpected error:', error);
+    console.error("Signup error:", error);
+
     return NextResponse.json(
-      { success: false, error: 'An unexpected error occurred. Please try again.' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     );
   }
