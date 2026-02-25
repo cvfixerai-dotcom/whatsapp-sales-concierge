@@ -95,7 +95,13 @@ export async function POST(request: NextRequest) {
     if (tenantError || !tenant) {
       console.error('[Signup] Tenant creation error:', tenantError);
       return NextResponse.json(
-        { success: false, error: 'Failed to create account. Please try again.' },
+        {
+          success: false,
+          error: tenantError?.message || 'Failed to create account. Please try again.',
+          code: tenantError?.code,
+          details: tenantError?.details,
+          hint: tenantError?.hint,
+        },
         { status: 500 }
       );
     }
