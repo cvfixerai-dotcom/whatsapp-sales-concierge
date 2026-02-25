@@ -88,7 +88,7 @@ async function storeLastSlots(contactId: string | undefined, slots: any[], timez
         : {};
 
     const slotPayload = (slots || []).slice(0, 20).map(slot => ({
-      datetime: slot.datetime,
+      datetime: slot.datetime,    // ISO — required for resolveFromLastOfferedSlots matching
       formatted: slot.formatted,
       time: slot.time,
       dayName: slot.dayName,
@@ -166,11 +166,13 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
 
     console.log(`[Tool: checkCalendar] In-app calendar returned ${slots.length} slots`);
 
+    // IMPORTANT: The AI must display `formatted` to the user but pass `datetime` (ISO) to book_appointment.
+    // Never ask the AI to construct or guess a datetime — only the ISO values from this list are valid for booking.
     return {
       success: true,
-      available_slots: slotsToReturn.map(s => ({ 
-        datetime: s.datetime, 
-        formatted: s.formatted,
+      available_slots: slotsToReturn.map(s => ({
+        datetime: s.datetime,    // ISO 8601 — pass this exact value to book_appointment
+        formatted: s.formatted,  // Human-readable — display this to the customer
         dayName: s.dayName,
         dateOnly: s.dateOnly,
       })),

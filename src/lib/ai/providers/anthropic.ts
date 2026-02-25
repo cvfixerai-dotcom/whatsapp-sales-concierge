@@ -11,6 +11,16 @@ export class AnthropicProvider extends BaseAIProvider {
         params.newMessage
       );
 
+      const toolEnforcementInstruction = params.tools.length > 0
+        ? '\n\nCRITICAL RULES — FOLLOW WITHOUT EXCEPTION:\n' +
+          '1. You MUST use tools. Do not confirm bookings without tool execution.\n' +
+          '2. NEVER calculate, guess, or generate dates, times, or weekday names yourself.\n' +
+          '3. To show availability: call check_calendar, then display the returned `formatted` strings.\n' +
+          '4. To book: call book_appointment with the exact `datetime` ISO string from check_calendar results.\n' +
+          '5. NEVER write a booking confirmation message — the system sends it automatically after a successful booking.\n' +
+          '6. If the customer names a time you did not offer, call check_calendar again rather than constructing a datetime.'
+        : '';
+
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -23,7 +33,7 @@ export class AnthropicProvider extends BaseAIProvider {
           max_tokens: params.maxTokens || 1000,
           temperature: params.temperature || 0.7,
           messages: messages.slice(1), // Exclude system message
-          system: params.systemPrompt,
+          system: params.systemPrompt + toolEnforcementInstruction,
           tools: params.tools.length > 0 ? params.tools : undefined,
         }),
       });
