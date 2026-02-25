@@ -76,7 +76,7 @@ export default function SignUpPage() {
       }
 
       if (result?.ok) {
-        router.push('/dashboard');
+        router.push('/onboarding');
         return;
       }
 
