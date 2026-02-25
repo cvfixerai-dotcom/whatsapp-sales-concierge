@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { signIn } from 'next-auth/react';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function SignUpPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Creating account...');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -40,6 +42,8 @@ export default function SignUpPage() {
     setLoading(true);
 
     try {
+      // Step 1: Create the account
+      setLoadingMessage('Creating account...');
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,11 +61,32 @@ export default function SignUpPage() {
         throw new Error(data.error || 'Failed to create account');
       }
 
+      // Step 2: Auto-login using NextAuth credentials provider
+      setLoadingMessage('Signing you in...');
+      const result = await signIn('credentials', {
+        redirect: false,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (result?.error) {
+        // Account was created but auto-login failed — send to login page
+        router.push('/auth/login?registered=true');
+        return;
+      }
+
+      if (result?.ok) {
+        router.push('/dashboard');
+        return;
+      }
+
+      // Fallback: should not reach here, but handle gracefully
       router.push('/auth/login?registered=true');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+      setLoadingMessage('Creating account...');
     }
   };
 
@@ -236,7 +261,7 @@ export default function SignUpPage() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
-                  Creating account...
+                  {loadingMessage}
                 </span>
               ) : 'Create Account'}
             </button>
