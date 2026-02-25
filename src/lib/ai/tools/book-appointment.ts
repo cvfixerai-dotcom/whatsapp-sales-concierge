@@ -60,7 +60,7 @@ export async function bookAppointment({
     const inviteeName = contact.name || 'Customer';
     const companyName = tenant.company_name || 'Our Team';
 
-    const resolvedSlotTime = await resolveSlotTime(slotTime, tenantId, tenant.timezone);
+    const resolvedSlotTime = await resolveSlotTime(slotTime, tenantId, tenant.timezone, contactId);
 
     if (!resolvedSlotTime) {
       console.warn('[Tool: bookAppointment] Unable to resolve slot time:', slotTime);
@@ -170,7 +170,11 @@ function isIsoDateTime(value: string): boolean {
 }
 
 function extractTimeParts(input: string): { hours: number; minutes: number } | null {
-  const match = input.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+  if (!input) return null;
+  const lowered = input.toLowerCase();
+  if (lowered.includes('noon')) return { hours: 12, minutes: 0 };
+  if (lowered.includes('midnight')) return { hours: 0, minutes: 0 };
+  const match = lowered.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
   if (!match) return null;
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2] || '0', 10);
@@ -217,7 +221,12 @@ function getDateOnlyInTimezone(date: Date, timezone: string): string {
   });
 }
 
-async function resolveSlotTime(rawSlotTime: string, tenantId: string, timezone?: string): Promise<string | null> {
+async function resolveSlotTime(
+  rawSlotTime: string,
+  tenantId: string,
+  timezone?: string,
+  contactId?: string
+): Promise<string | null> {
   if (!rawSlotTime) return null;
   if (isIsoDateTime(rawSlotTime)) return rawSlotTime;
 
@@ -225,10 +234,27 @@ async function resolveSlotTime(rawSlotTime: string, tenantId: string, timezone?:
   const timeParts = extractTimeParts(input);
   if (!timeParts) return null;
 
-  const slots = await getAvailableSlots(tenantId, new Date(), 14);
-  if (!slots.length) return null;
+  let candidates: any[] = [];
 
-  let candidates = slots.filter(slot => timeMatches(slot.time, timeParts));
+  if (contactId) {
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('metadata')
+      .eq('id', contactId)
+      .single();
+    const lastSlots = Array.isArray(contact?.metadata?.calendar_last_slots)
+      ? contact.metadata.calendar_last_slots
+      : [];
+    if (lastSlots.length) {
+      candidates = lastSlots.filter(slot => timeMatches(slot.time || slot.formatted || '', timeParts));
+    }
+  }
+
+  if (!candidates.length) {
+    const slots = await getAvailableSlots(tenantId, new Date(), 14);
+    if (!slots.length) return null;
+    candidates = slots.filter(slot => timeMatches(slot.time, timeParts));
+  }
 
   const dayName = extractDayName(input);
   if (dayName) {
