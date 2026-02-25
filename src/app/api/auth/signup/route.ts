@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       .from('tenants')
       .insert({
         company_name: companyName.trim(),
-        subscription_tier: 'free',
+        subscription_tier: 'starter',
         subscription_status: 'trial',
         trial_start_date: trialStart.toISOString(),
         trial_end_date: trialEnd.toISOString(),

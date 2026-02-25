@@ -316,29 +316,80 @@ export async function GET() {
   });
 }
 
+const UPGRADE_MESSAGE =
+  "Your 7-day trial has ended or your trial conversation limit has been reached. " +
+  "Please upgrade your plan in your dashboard to continue using WhatsApp AI automation.";
+
+function resolveConversationLimit(t: { subscription_status: string; subscription_tier: string; trial_conversation_limit?: number | null; monthly_conversation_limit?: number | null }): number {
+  if (t.subscription_status === 'trial') {
+    return t.trial_conversation_limit || 25;
+  }
+  const tierLimits: Record<string, number> = { starter: 200, growth: 800, scale: 2500, enterprise: Infinity };
+  return t.monthly_conversation_limit || tierLimits[t.subscription_tier] || 200;
+}
+
 async function checkTenantLimits(tenantId: string, fromNumber: string, log: (msg: string) => void): Promise<boolean> {
+  const cleanNumber = fromNumber.replace('whatsapp:', '');
   try {
-    const { data: t } = await supabaseAdmin.from('tenants').select('subscription_tier, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit').eq('id', tenantId).single();
+    const { data: t } = await supabaseAdmin
+      .from('tenants')
+      .select('subscription_tier, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit')
+      .eq('id', tenantId)
+      .single();
     if (!t) return true;
 
+    // Step 1: trial expired by date
     if (t.subscription_status === 'trial' && t.trial_end_date && new Date(t.trial_end_date) < new Date()) {
-      log('Trial expired');
-      await twilioService.sendWhatsAppMessage(tenantId, fromNumber.replace('whatsapp:', ''), "Thanks for your message! This business is currently updating their system. Please try again later.", { bypassRateLimit: true });
+      log('Trial expired by date — marking past_due');
+      await supabaseAdmin.from('tenants').update({ subscription_status: 'past_due' }).eq('id', tenantId);
+      await twilioService.sendWhatsAppMessage(tenantId, cleanNumber, UPGRADE_MESSAGE, { bypassRateLimit: true });
       return false;
     }
 
-    const tierLimits: Record<string, number> = { free: 25, starter: 200, growth: 800, scale: 2500 };
-    const limit = t.subscription_status === 'trial' ? (t.trial_conversation_limit || 25) : (t.monthly_conversation_limit || tierLimits[t.subscription_tier] || 200);
-    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-    const { count } = await supabaseAdmin.from('conversations').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', monthStart.toISOString());
+    // Step 2: trial conversation limit reached
+    if (t.subscription_status === 'trial') {
+      const trialLimit = resolveConversationLimit(t);
+      const { count: trialCount } = await supabaseAdmin
+        .from('conversations')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .gte('created_at', t.trial_end_date
+          ? new Date(new Date(t.trial_end_date).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+          : new Date(0).toISOString());
+      const trialUsage = trialCount || 0;
+      if (trialUsage >= trialLimit) {
+        log(`Trial limit reached: ${trialUsage}/${trialLimit} — marking past_due`);
+        await supabaseAdmin.from('tenants').update({ subscription_status: 'past_due' }).eq('id', tenantId);
+        await twilioService.sendWhatsAppMessage(tenantId, cleanNumber, UPGRADE_MESSAGE, { bypassRateLimit: true });
+        return false;
+      }
+      log(`Trial usage: ${trialUsage}/${trialLimit}`);
+      return true;
+    }
+
+    // Step 3: past_due — subscription required
+    if (t.subscription_status === 'past_due') {
+      log('Subscription past_due — blocking');
+      await twilioService.sendWhatsAppMessage(tenantId, cleanNumber, UPGRADE_MESSAGE, { bypassRateLimit: true });
+      return false;
+    }
+
+    // Step 4: active/paid — check monthly limit
+    const limit = resolveConversationLimit(t);
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const { count } = await supabaseAdmin
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .gte('created_at', monthStart.toISOString());
     const usage = count || 0;
 
     if (usage >= limit) {
-      log(`Limit reached: ${usage}/${limit}`);
-      await twilioService.sendWhatsAppMessage(tenantId, fromNumber.replace('whatsapp:', ''), "Thanks for your message! We're experiencing high demand. Our team will get back to you soon.", { bypassRateLimit: true });
+      log(`Monthly limit reached: ${usage}/${limit}`);
+      await twilioService.sendWhatsAppMessage(tenantId, cleanNumber, UPGRADE_MESSAGE, { bypassRateLimit: true });
       return false;
     }
-    log(`Usage: ${usage}/${limit} (${t.subscription_tier})`);
+    log(`Usage: ${usage}/${limit} (${t.subscription_tier} / ${t.subscription_status})`);
     return true;
   } catch (err) {
     log(`Limit check error: ${err}`);
