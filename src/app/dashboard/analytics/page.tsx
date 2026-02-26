@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { StatsSkeleton, ChartSkeleton } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
 import {
@@ -33,7 +33,9 @@ import {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export default function AnalyticsPage() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');

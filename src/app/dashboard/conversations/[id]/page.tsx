@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { useRouter, useParams } from 'next/navigation';
 import {
   User, Phone, Mail, Calendar, Clock, MessageSquare, Bot, UserCheck,
@@ -71,7 +71,9 @@ const getScoreColor = (score: number) => {
 };
 
 export default function ConversationViewer() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   const params = useParams();
   const conversationId = params.id as string;

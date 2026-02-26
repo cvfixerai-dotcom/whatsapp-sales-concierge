@@ -6,9 +6,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 /**
  * GET /api/settings/calendar
@@ -16,15 +17,15 @@ import { supabaseAdmin } from '@/lib/db/client';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { data: tenant, error } = await supabaseAdmin
       .from('tenants')
       .select('calendar_provider, calendly_api_key, calendly_event_url, google_calendar_id, google_refresh_token')
-      .eq('id', session.user.tenantId)
+      .eq('id', sessionUser.tenantId)
       .single();
 
     if (error || !tenant) {
@@ -59,8 +60,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('tenants')
       .update(updates)
-      .eq('id', session.user.tenantId);
+      .eq('id', sessionUser.tenantId);
 
     if (error) {
       console.error('[Calendar Settings] Update error:', error);
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Calendar Settings] Updated for tenant ${session.user.tenantId}`);
+    console.log(`[Calendar Settings] Updated for tenant ${sessionUser.tenantId}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

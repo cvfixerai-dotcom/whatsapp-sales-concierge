@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 /**
  * GET /api/calendar/blocks?start=2024-02-01T00:00:00.000Z&end=2024-02-29T23:59:59.000Z
@@ -11,8 +12,8 @@ import { supabaseAdmin } from '@/lib/db/client';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('blocked_slots')
       .select('id, start_time, end_time, reason')
-      .eq('tenant_id', session.user.tenantId)
+      .eq('tenant_id', sessionUser.tenantId)
       .lte('start_time', end)
       .gte('end_time', start)
       .order('start_time', { ascending: true });
@@ -46,8 +47,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('blocked_slots')
       .insert({
-        tenant_id: session.user.tenantId,
+        tenant_id: sessionUser.tenantId,
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
         reason: reason || null,
@@ -92,8 +93,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -107,7 +108,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('blocked_slots')
       .delete()
-      .eq('tenant_id', session.user.tenantId)
+      .eq('tenant_id', sessionUser.tenantId)
       .eq('id', id);
 
     if (error) {

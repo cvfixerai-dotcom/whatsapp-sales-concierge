@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { SkeletonPulse } from '@/components/skeletons';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TeamSection from '@/components/TeamSection';
@@ -60,7 +60,9 @@ interface HandoffSettings {
 }
 
 function SettingsPageContent() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   const searchParams = useSearchParams();
   

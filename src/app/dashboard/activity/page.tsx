@@ -2,15 +2,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { TableSkeleton } from '@/components/skeletons';
-import { supabase } from '@/lib/supabase-client';
 import { Activity, RefreshCw, AlertCircle, CheckCircle, Clock, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 
 const PAGE_SIZE = 20;
 
 export default function ActivityPage() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -22,8 +23,8 @@ export default function ActivityPage() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.tenantId) fetchEvents();
-  }, [status, session, page, sortAsc, filterSource, filterStatus]);
+    if (status === 'authenticated') fetchEvents();
+  }, [status, page, sortAsc, filterSource, filterStatus]);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -35,25 +36,28 @@ export default function ActivityPage() {
   }, [autoRefresh]);
 
   async function fetchEvents() {
-    if (!session?.user?.tenantId) return;
     try {
-      let q = supabase.from('webhook_events').select('*', { count: 'exact' })
-        .or(`tenant_id.eq.${session.user.tenantId},tenant_id.is.null`)
-        .order('created_at', { ascending: sortAsc })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-      if (filterSource !== 'all') q = q.eq('source', filterSource);
-      if (filterStatus === 'processed') q = q.eq('processed', true);
-      else if (filterStatus === 'pending') q = q.eq('processed', false).eq('retry_count', 0);
-      else if (filterStatus === 'failed') q = q.eq('processed', false).gt('retry_count', 0);
-      const { data, count } = await q;
+      const params = new URLSearchParams({
+        page: String(page),
+        sort: sortAsc ? 'asc' : 'desc',
+        source: filterSource,
+        status: filterStatus,
+      });
+      const res = await fetch(`/api/activity?${params}`);
+      if (!res.ok) throw new Error('Failed');
+      const { events: data, total } = await res.json();
       setEvents(data || []);
-      setTotalCount(count || 0);
+      setTotalCount(total || 0);
     } catch (e) { console.error('Error:', e); }
     finally { setLoading(false); }
   }
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-  const srcColors: Record<string,string> = { twilio: 'bg-blue-100 text-blue-800', calendly: 'bg-purple-100 text-purple-800', stripe: 'bg-orange-100 text-orange-800' };
+  const srcColors: Record<string, string> = {
+    twilio: 'bg-blue-100 text-blue-800',
+    calendly: 'bg-purple-100 text-purple-800',
+    stripe: 'bg-orange-100 text-orange-800',
+  };
 
   if (loading) return <TableSkeleton rows={10} />;
 
@@ -77,7 +81,6 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <select value={filterSource} onChange={(e) => { setFilterSource(e.target.value); setPage(0); }}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-900">
@@ -99,7 +102,6 @@ export default function ActivityPage() {
         </button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -137,7 +139,6 @@ export default function ActivityPage() {
             </tbody>
           </table>
         </div>
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
             <p className="text-sm text-gray-600">Page {page + 1} of {totalPages}</p>

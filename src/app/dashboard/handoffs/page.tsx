@@ -2,11 +2,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { toast } from 'sonner';
 import { StatsSkeleton, TableSkeleton } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
 import {
   UserPlus,
   Clock,
@@ -65,7 +64,9 @@ const statusColors = {
 const DEFAULT_PERIOD = '30d';
 
 export default function HandoffsPage() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   
   const [loading, setLoading] = useState(true);

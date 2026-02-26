@@ -5,9 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -23,8 +24,8 @@ const SCOPES = [
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -37,13 +38,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the base URL for redirect
-    const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const redirectUri = `${baseUrl}/api/auth/google-calendar/callback`;
 
     // Store tenant ID in state for callback
     const state = Buffer.from(JSON.stringify({
-      tenantId: session.user.tenantId,
-      userId: session.user.id,
+      tenantId: sessionUser.tenantId,
+      userId: sessionUser.userId,
     })).toString('base64');
 
     const authUrl = new URL(GOOGLE_AUTH_URL);

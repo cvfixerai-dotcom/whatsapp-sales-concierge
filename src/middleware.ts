@@ -1,83 +1,55 @@
-import { withAuth } from 'next-auth/middleware';
-import { NextResponse } from 'next/server';
+// @ts-nocheck
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { NextRequest, NextResponse } from 'next/server';
 
-// Public API routes that don't require authentication (webhooks, etc.)
-const PUBLIC_API_ROUTES = [
+const PUBLIC_PATHS = [
+  '/',
+  '/pricing',
+  '/about',
+  '/realestate',
+  '/outreach',
+  '/auth/login',
+  '/auth/signup',
+  '/auth/callback',
+  '/auth/forgot-password',
+  '/auth/error',
+];
+
+const PUBLIC_API_PREFIXES = [
   '/api/webhook/',
   '/api/webhooks/',
-  '/api/auth/',
+  '/api/auth/signup',
   '/api/health',
   '/api/demo/',
 ];
 
-function isPublicApiRoute(pathname: string): boolean {
-  return PUBLIC_API_ROUTES.some(route => pathname.startsWith(route));
+function isPublic(pathname: string): boolean {
+  if (PUBLIC_PATHS.includes(pathname)) return true;
+  if (PUBLIC_API_PREFIXES.some(p => pathname.startsWith(p))) return true;
+  return false;
 }
 
-export default withAuth(
-  function middleware(req) {
-    // Get token from request
-    const token = req.nextauth.token;
-    const { pathname } = req.nextUrl;
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  const { pathname } = req.nextUrl;
 
-    // Allow access to auth pages
-    if (pathname.startsWith('/auth/')) {
-      return NextResponse.next();
-    }
+  // Always allow public paths without touching session
+  if (isPublic(pathname)) return res;
 
-    // Allow public API routes (webhooks)
-    if (isPublicApiRoute(pathname)) {
-      return NextResponse.next();
-    }
+  // Refresh session cookie on every request (keeps token alive)
+  const supabase = createMiddlewareClient({ req, res });
+  const { data: { session } } = await supabase.auth.getSession();
 
-    // Protect dashboard routes
-    if (pathname.startsWith('/dashboard') || pathname.startsWith('/api/')) {
-      if (!token) {
-        return NextResponse.redirect(new URL('/auth/login', req.url));
-      }
-    }
-
-    // Redirect authenticated users away from login
-    if (pathname === '/auth/login' && token) {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
-
-    return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: ({ token, req }) => {
-        const { pathname } = req.nextUrl;
-        
-        // Public routes that don't require authentication
-        if (pathname === '/' || pathname === '/pricing' || pathname === '/about' || pathname === '/realestate') {
-          return true;
-        }
-
-        // Onboarding route requires authentication but is allowed
-        if (pathname === '/onboarding') {
-          return !!token;
-        }
-
-        // Auth routes
-        if (pathname.startsWith('/auth/')) {
-          return true;
-        }
-
-        // Public API routes (webhooks)
-        if (isPublicApiRoute(pathname)) {
-          return true;
-        }
-
-        // All other routes require authentication
-        return !!token;
-      },
-    },
+  // Unauthenticated — redirect to login
+  if (!session) {
+    const loginUrl = req.nextUrl.clone();
+    loginUrl.pathname = '/auth/login';
+    return NextResponse.redirect(loginUrl);
   }
-);
+
+  return res;
+}
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|public).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|public).*)'],
 };

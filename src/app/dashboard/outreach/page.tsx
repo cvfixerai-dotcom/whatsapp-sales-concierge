@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { toast } from 'sonner';
 import { TableSkeleton } from '@/components/skeletons';
 import {
@@ -66,7 +66,9 @@ Curious what you think.`;
 type BooleanFilter = { [key: string]: 'true' | 'false' | '' };
 
 export default function OutreachPage() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const [leads, setLeads] = useState<AgencyLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');

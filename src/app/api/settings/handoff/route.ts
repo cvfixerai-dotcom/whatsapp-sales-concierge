@@ -6,8 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { handoffService } from '@/lib/services/handoff';
 
 /**
@@ -16,12 +16,12 @@ import { handoffService } from '@/lib/services/handoff';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const settings = await handoffService.getHandoffSettings(session.user.tenantId);
+    const settings = await handoffService.getHandoffSettings(sessionUser.tenantId);
 
     return NextResponse.json(settings);
   } catch (error) {
@@ -39,15 +39,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     
     const success = await handoffService.updateHandoffSettings(
-      session.user.tenantId,
+      sessionUser.tenantId,
       body
     );
 

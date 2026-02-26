@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { getAvailableSlots } from '@/lib/services/calendar/inapp';
 
 /**
@@ -9,8 +9,8 @@ import { getAvailableSlots } from '@/lib/services/calendar/inapp';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const days = parseInt(searchParams.get('days') || '7');
 
     const startDate = dateParam ? new Date(dateParam) : new Date();
-    const slots = await getAvailableSlots(session.user.tenantId, startDate, days);
+    const slots = await getAvailableSlots(sessionUser.tenantId, startDate, days);
 
     return NextResponse.json({ slots, count: slots.length });
   } catch (error) {

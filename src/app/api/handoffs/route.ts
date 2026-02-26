@@ -6,9 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { handoffService } from '@/lib/services/handoff';
+import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 /**
  * GET /api/handoffs
@@ -16,12 +16,12 @@ import { handoffService } from '@/lib/services/handoff';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const handoffs = await handoffService.getPendingHandoffs(session.user.tenantId);
+    const handoffs = await handoffService.getPendingHandoffs(sessionUser.tenantId);
 
     return NextResponse.json({
       handoffs,
@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId || !session?.user?.id) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'acknowledge':
-        success = await handoffService.acknowledgeHandoff(handoffId, session.user.id);
+        success = await handoffService.acknowledgeHandoff(handoffId, sessionUser.userId);
         break;
       
       case 'resolve':

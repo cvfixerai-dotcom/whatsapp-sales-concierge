@@ -1,16 +1,17 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 const BOOLEAN_FILTERS = ['linkedin_found', 'contacted', 'replied', 'demo_done', 'trial_started', 'client'];
 const ALLOWED_FIELDS = [...BOOLEAN_FILTERS, 'contact_name', 'linkedin_url', 'company_corrected', 'notes'];
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== 'admin') {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -52,8 +53,8 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== 'admin') {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -88,8 +89,8 @@ export async function PATCH(request: NextRequest) {
 // Create new lead
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== 'admin') {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -128,8 +129,8 @@ export async function POST(request: NextRequest) {
 // Bulk update
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== 'admin') {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 

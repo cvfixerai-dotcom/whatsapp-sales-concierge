@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
 import { StatsSkeleton, ListSkeleton } from '@/components/skeletons';
 import {
@@ -24,7 +24,9 @@ const temperatureColors = {
 };
 
 export default function ConversationsPage() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);

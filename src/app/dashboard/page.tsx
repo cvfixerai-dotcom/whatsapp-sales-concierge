@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { DashboardSkeleton } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
 import {
@@ -64,7 +64,9 @@ interface Booking {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [kpiData, setKpiData] = useState<KPICard[]>([]);

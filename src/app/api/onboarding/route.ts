@@ -6,15 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 import { createDefaultFollowUpSequences } from '@/lib/services/followup-templates';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
         calendar_provider,
         handoff_settings
       `)
-      .eq('id', session.user.tenantId)
+      .eq('id', sessionUser.tenantId)
       .single();
 
     if (error || !tenant) {
@@ -111,8 +112,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -182,7 +183,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('tenants')
       .update(updates)
-      .eq('id', session.user.tenantId);
+      .eq('id', sessionUser.tenantId);
 
     if (error) {
       console.error('[Onboarding API] Update error:', error);
@@ -191,12 +192,12 @@ export async function POST(request: NextRequest) {
 
     // Auto-create follow-up sequences when industry is set (Step 0)
     if (step === 0 && updates.industry) {
-      await createDefaultFollowUpSequences(session.user.tenantId, updates.industry);
+      await createDefaultFollowUpSequences(sessionUser.tenantId, updates.industry);
     }
 
     // Log onboarding progress
     await supabaseAdmin.from('onboarding_logs').insert({
-      tenant_id: session.user.tenantId,
+      tenant_id: sessionUser.tenantId,
       step_name: getStepName(step),
       step_number: step,
       status: 'completed',

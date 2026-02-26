@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 const PERIOD_DAYS: Record<string, number> = {
   '7d': 7,
@@ -19,8 +20,8 @@ const getSeverity = (triggers: string[] = [], escalated: boolean) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
         contacts(name, whatsapp_number, email),
         claimed_user:users!handoff_claimed_by(full_name, email)
       `)
-      .eq('tenant_id', session.user.tenantId)
+      .eq('tenant_id', sessionUser.tenantId)
       .not('handoff_requested_at', 'is', null)
       .gte('handoff_requested_at', since)
       .order('handoff_requested_at', { ascending: false });

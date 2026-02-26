@@ -1,12 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { signIn } from 'next-auth/react';
 
 export default function SignUpPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     companyName: '',
     fullName: '',
@@ -16,13 +13,10 @@ export default function SignUpPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState('Creating account...');
+  const [confirmed, setConfirmed] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,17 +27,13 @@ export default function SignUpPage() {
       setError('Passwords do not match');
       return;
     }
-
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters');
       return;
     }
 
     setLoading(true);
-
     try {
-      // Step 1: Create the account
-      setLoadingMessage('Creating account...');
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,39 +46,38 @@ export default function SignUpPage() {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create account');
       }
-
-      // Step 2: Auto-login using NextAuth credentials provider
-      setLoadingMessage('Signing you in...');
-      const result = await signIn('credentials', {
-        redirect: false,
-        email: formData.email,
-        password: formData.password,
-      });
-
-      if (result?.error) {
-        // Account was created but auto-login failed — send to login page
-        router.push('/auth/login?registered=true');
-        return;
-      }
-
-      if (result?.ok) {
-        router.push('/onboarding');
-        return;
-      }
-
-      // Fallback: should not reach here, but handle gracefully
-      router.push('/auth/login?registered=true');
+      setConfirmed(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
-      setLoadingMessage('Creating account...');
     }
   };
+
+  if (confirmed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">Check your email</h1>
+          <p className="text-gray-500 mb-6">
+            We sent a confirmation link to <span className="font-medium text-gray-800">{formData.email}</span>.
+            Click the link to confirm your account, then you can sign in.
+          </p>
+          <Link href="/auth/login" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all text-sm">
+            Go to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -145,7 +134,6 @@ export default function SignUpPage() {
       {/* Right Panel — Form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white">
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
           <div className="lg:hidden mb-8">
             <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center">
@@ -171,106 +159,53 @@ export default function SignUpPage() {
             )}
 
             <div>
-              <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Company Name
-              </label>
-              <input
-                id="companyName"
-                name="companyName"
-                type="text"
-                required
-                value={formData.companyName}
-                onChange={handleChange}
+              <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1.5">Company Name</label>
+              <input id="companyName" name="companyName" type="text" required value={formData.companyName} onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="Your Company"
-              />
+                placeholder="Your Company" />
             </div>
 
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Full Name
-              </label>
-              <input
-                id="fullName"
-                name="fullName"
-                type="text"
-                required
-                value={formData.fullName}
-                onChange={handleChange}
+              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
+              <input id="fullName" name="fullName" type="text" required value={formData.fullName} onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="John Doe"
-              />
+                placeholder="John Doe" />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email Address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+              <input id="email" name="email" type="email" autoComplete="email" required value={formData.email} onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="you@company.com"
-              />
+                placeholder="you@company.com" />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={formData.password}
-                onChange={handleChange}
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+              <input id="password" name="password" type="password" autoComplete="new-password" required value={formData.password} onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="Min 8 characters"
-              />
+                placeholder="Min 8 characters" />
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Confirm Password
-              </label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={formData.confirmPassword}
-                onChange={handleChange}
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+              <input id="confirmPassword" name="confirmPassword" type="password" autoComplete="new-password" required value={formData.confirmPassword} onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="Confirm your password"
-              />
+                placeholder="Confirm your password" />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm mt-2"
-            >
+            <button type="submit" disabled={loading}
+              className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm mt-2">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
-                  {loadingMessage}
+                  Creating account...
                 </span>
               ) : 'Create Account'}
             </button>
 
             <p className="text-center text-sm text-gray-500">
               Already have an account?{' '}
-              <Link href="/auth/login" className="text-blue-600 font-medium hover:text-blue-700">
-                Sign in
-              </Link>
+              <Link href="/auth/login" className="text-blue-600 font-medium hover:text-blue-700">Sign in</Link>
             </p>
 
             <p className="text-center text-xs text-gray-400 mt-4">

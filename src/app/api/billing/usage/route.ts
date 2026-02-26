@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 import { getPaymentHistory } from '@/lib/billing/paystack';
 import { getUsageReport } from '@/lib/billing/usage-tracker';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const sessionUser = await getSessionUser();
     
-    if (!session || !session.user.tenantId) {
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
 
     // Get tenant details
     const { data: tenant, error: tenantError } = await supabaseAdmin

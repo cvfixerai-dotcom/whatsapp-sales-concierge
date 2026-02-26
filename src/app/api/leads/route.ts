@@ -1,16 +1,17 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
     const url = new URL(request.url);
     const temperature = url.searchParams.get('temperature');
     const timeline = url.searchParams.get('timeline');
@@ -56,8 +57,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('contacts')
       .insert({
-        tenant_id: session.user.tenantId,
+        tenant_id: sessionUser.tenantId,
         name,
         whatsapp_number,
         email: email || null,
@@ -102,8 +103,8 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -118,7 +119,7 @@ export async function PATCH(request: NextRequest) {
       .from('contacts')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('tenant_id', session.user.tenantId);
+      .eq('tenant_id', sessionUser.tenantId);
 
     if (error) {
       console.error('[Leads API] Update error:', error);

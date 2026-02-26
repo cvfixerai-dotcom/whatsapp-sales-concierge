@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 const PERIOD_DAYS: Record<string, number> = {
   '7d': 7,
@@ -22,8 +23,8 @@ const chunkArray = <T,>(items: T[], size: number): T[][] => {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -36,17 +37,17 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from('conversations')
         .select('id, created_at, status, contact_id')
-        .eq('tenant_id', session.user.tenantId)
+        .eq('tenant_id', sessionUser.tenantId)
         .gte('created_at', since),
       supabaseAdmin
         .from('contacts')
         .select('id, temperature, qualification_status, created_at, lead_score')
-        .eq('tenant_id', session.user.tenantId)
+        .eq('tenant_id', sessionUser.tenantId)
         .gte('created_at', since),
       supabaseAdmin
         .from('appointments')
         .select('id, contact_id, status, created_at')
-        .eq('tenant_id', session.user.tenantId)
+        .eq('tenant_id', sessionUser.tenantId)
         .gte('created_at', since),
     ]);
 

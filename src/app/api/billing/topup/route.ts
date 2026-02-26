@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { purchaseTopUp } from '@/lib/billing/paystack';
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const sessionUser = await getSessionUser();
     
-    if (!session || !session.user.tenantId) {
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
 
     // Check if tenant has active subscription
     const { data: tenant, error: tenantError } = await supabaseAdmin

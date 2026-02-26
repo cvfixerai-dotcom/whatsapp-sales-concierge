@@ -1,16 +1,17 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
 
     // Fetch all stats in parallel
     const [convResult, leadsResult, appointmentsResult, contactsResult, recentConvos, bookings, handoffs] = await Promise.all([

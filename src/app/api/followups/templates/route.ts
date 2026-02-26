@@ -1,18 +1,19 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { data, error } = await supabaseAdmin
       .from('follow_up_sequences')
       .select('*')
-      .eq('tenant_id', session.user.tenantId)
+      .eq('tenant_id', sessionUser.tenantId)
       .order('target_temperature', { ascending: true });
 
     if (error) return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
@@ -24,8 +25,8 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
     const { id, day_3_message, day_7_message, day_21_message, is_active } = body;
@@ -41,7 +42,7 @@ export async function PUT(request: NextRequest) {
       .from('follow_up_sequences')
       .update(updates)
       .eq('id', id)
-      .eq('tenant_id', session.user.tenantId);
+      .eq('tenant_id', sessionUser.tenantId);
 
     if (error) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
     return NextResponse.json({ success: true });

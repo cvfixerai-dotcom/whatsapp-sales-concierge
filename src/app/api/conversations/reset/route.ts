@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 /**
  * DELETE /api/conversations/reset
@@ -15,12 +16,12 @@ import { supabaseAdmin } from '@/lib/db/client';
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
     const { searchParams } = new URL(request.url);
     const contactId = searchParams.get('contact_id');
     const conversationId = searchParams.get('conversation_id');

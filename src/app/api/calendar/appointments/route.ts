@@ -1,16 +1,17 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 /**
  * GET /api/calendar/appointments?start=2024-02-01T00:00:00.000Z&end=2024-02-29T23:59:59.000Z
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('appointments')
       .select(`*, contacts(name, whatsapp_number, email)`)
-      .eq('tenant_id', session.user.tenantId)
+      .eq('tenant_id', sessionUser.tenantId)
       .gte('scheduled_time', rangeStart)
       .lte('scheduled_time', rangeEnd)
       .order('scheduled_time', { ascending: true });

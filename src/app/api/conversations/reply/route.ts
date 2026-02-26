@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 import { twilioService } from '@/lib/services/twilio';
 
 /**
@@ -13,12 +14,12 @@ import { twilioService } from '@/lib/services/twilio';
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
     const body = await request.json();
     const { conversation_id, content } = body;
 
@@ -72,8 +73,8 @@ export async function POST(request: NextRequest) {
         direction: 'outbound',
         twilio_message_sid: sendResult.messageSid || null,
         metadata: {
-          agent_id: session.user.id,
-          agent_email: session.user.email,
+          agent_id: sessionUser.userId,
+          agent_email: sessionUser.userId,
           sent_from: 'dashboard',
         },
       })
@@ -90,12 +91,12 @@ export async function POST(request: NextRequest) {
       .from('conversations')
       .update({
         status: 'human-handling',
-        assigned_agent_id: session.user.id,
+        assigned_agent_id: sessionUser.userId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', conversation_id);
 
-    console.log(`[Reply] Agent ${session.user.email} replied to conversation ${conversation_id}`);
+    console.log(`[Reply] Agent ${sessionUser.userId} replied to conversation ${conversation_id}`);
 
     return NextResponse.json({
       success: true,

@@ -2,23 +2,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
-  Building2,
-  MessageSquare,
-  Bot,
-  Calendar,
-  Bell,
-  CheckCircle,
-  ChevronRight,
-  ChevronLeft,
-  Loader2,
-  ExternalLink,
-  Copy,
-  Check,
-  Sparkles,
+  Building2, MessageSquare, Bot, Calendar, Bell, CheckCircle,
+  ChevronRight, ChevronLeft, Loader2, ExternalLink, Copy, Check, Sparkles,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase-browser';
 
 interface OnboardingData {
   onboarding_completed: boolean;
@@ -37,65 +26,60 @@ const STEPS = [
 ];
 
 export default function OnboardingPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
-  
+
+  const [authChecked, setAuthChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
   const [copied, setCopied] = useState(false);
-  
-  // Form states for each step
+
   const [businessProfile, setBusinessProfile] = useState({
-    company_name: '',
-    business_type: '',
-    business_description: '',
-    target_audience: '',
-    products_services: '',
-    timezone: 'UTC',
+    company_name: '', business_type: '', business_description: '',
+    target_audience: '', products_services: '', timezone: 'UTC',
   });
-  
   const [twilioSetup, setTwilioSetup] = useState({
-    twilio_account_sid: '',
-    twilio_auth_token: '',
-    twilio_whatsapp_number: '',
+    twilio_account_sid: '', twilio_auth_token: '', twilio_whatsapp_number: '',
   });
-  
   const [aiConfig, setAiConfig] = useState({
-    ai_personality: 'professional',
-    ai_language: 'en',
-    ai_greeting: '',
-    ai_fallback_message: '',
-    qualification_questions: [] as string[],
+    ai_personality: 'professional', ai_language: 'en',
+    ai_greeting: '', ai_fallback_message: '', qualification_questions: [] as string[],
   });
-  
   const [calendarSetup, setCalendarSetup] = useState({
-    calendar_provider: '',
-    calendly_api_key: '',
-    calendly_event_url: '',
+    calendar_provider: '', calendly_api_key: '', calendly_event_url: '',
   });
-  
   const [handoffSetup, setHandoffSetup] = useState({
     channels: { dashboard: true, email: true, whatsapp: false, telegram: false },
     recipients: { email: '', whatsapp: '', telegram_chat_id: '' },
   });
 
+  // Step 1: verify Supabase session
   useEffect(() => {
-    if (status === 'authenticated') {
-      fetchOnboardingStatus();
-    }
-  }, [status]);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        router.replace('/auth/login');
+        return;
+      }
+      setAuthChecked(true);
+    });
+  }, [router]);
+
+  // Step 2: fetch onboarding data only after auth is confirmed
+  useEffect(() => {
+    if (!authChecked) return;
+    fetchOnboardingStatus();
+  }, [authChecked]);
 
   async function fetchOnboardingStatus() {
     try {
       const response = await fetch('/api/onboarding');
+      if (response.status === 401) { router.replace('/auth/login'); return; }
       if (!response.ok) throw new Error('Failed to fetch');
       const data = await response.json();
       setOnboardingData(data);
       setCurrentStep(data.current_step || 0);
-      
-      // Pre-fill form data
+
       if (data.tenant) {
         setBusinessProfile({
           company_name: data.tenant.company_name || '',
@@ -113,11 +97,7 @@ export default function OnboardingPage() {
           qualification_questions: data.tenant.qualification_questions || [],
         });
         if (data.tenant.calendar_provider) {
-          setCalendarSetup({
-            calendar_provider: data.tenant.calendar_provider,
-            calendly_api_key: '',
-            calendly_event_url: '',
-          });
+          setCalendarSetup({ calendar_provider: data.tenant.calendar_provider, calendly_api_key: '', calendly_event_url: '' });
         }
         if (data.tenant.handoff_settings) {
           setHandoffSetup({
@@ -126,8 +106,8 @@ export default function OnboardingPage() {
           });
         }
       }
-      
-      // Redirect if onboarding is complete
+
+      // Only redirect to dashboard if onboarding is explicitly completed
       if (data.onboarding_completed) {
         router.push('/dashboard');
       }
@@ -144,13 +124,8 @@ export default function OnboardingPage() {
       const response = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          step: stepIndex,
-          data,
-          action: 'update_step',
-        }),
+        body: JSON.stringify({ step: stepIndex, data, action: 'update_step' }),
       });
-      
       if (!response.ok) throw new Error('Failed to save');
       return true;
     } catch (error) {
@@ -162,33 +137,21 @@ export default function OnboardingPage() {
   }
 
   async function handleNext() {
-    // Save current step data
-    let stepData;
+    let stepData: any;
     switch (currentStep) {
-      case 0:
-        stepData = businessProfile;
-        break;
-      case 1:
-        stepData = twilioSetup;
-        break;
-      case 2:
-        stepData = aiConfig;
-        break;
-      case 3:
-        stepData = calendarSetup;
-        break;
-      case 4:
-        stepData = { handoff_settings: handoffSetup };
-        break;
+      case 0: stepData = businessProfile; break;
+      case 1: stepData = twilioSetup; break;
+      case 2: stepData = aiConfig; break;
+      case 3: stepData = calendarSetup; break;
+      case 4: stepData = { handoff_settings: handoffSetup }; break;
     }
-    
+
     const saved = await saveStepData(currentStep, stepData);
     if (!saved) return;
-    
+
     if (currentStep < STEPS.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      // Complete onboarding
       await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -199,9 +162,7 @@ export default function OnboardingPage() {
   }
 
   function handleBack() {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
   }
 
   function copyToClipboard(text: string) {
@@ -210,7 +171,8 @@ export default function OnboardingPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (status === 'loading' || loading) {
+  // Show spinner while checking auth or loading data
+  if (!authChecked || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -218,20 +180,14 @@ export default function OnboardingPage() {
     );
   }
 
-  if (status === 'unauthenticated') {
-    router.push('/auth/signin');
-    return null;
-  }
-
   const CurrentStepIcon = STEPS[currentStep].icon;
-  const webhookUrl = typeof window !== 'undefined' 
+  const webhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/webhook/twilio`
-    : 'https://your-domain.com/api/webhook/twilio';
+    : 'https://concierge.fixeraitech.com/api/webhook/twilio';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="max-w-4xl mx-auto py-8 px-4">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-4">
             <Sparkles className="h-4 w-4" />
@@ -247,38 +203,19 @@ export default function OnboardingPage() {
             const StepIcon = step.icon;
             const isCompleted = index < currentStep;
             const isCurrent = index === currentStep;
-            
             return (
               <div key={step.id} className="flex flex-col items-center flex-1">
                 <div className="flex items-center w-full">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                      isCompleted
-                        ? 'bg-green-500 text-white'
-                        : isCurrent
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-500'
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle className="h-5 w-5" />
-                    ) : (
-                      <StepIcon className="h-5 w-5" />
-                    )}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                    isCompleted ? 'bg-green-500 text-white' : isCurrent ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+                  }`}>
+                    {isCompleted ? <CheckCircle className="h-5 w-5" /> : <StepIcon className="h-5 w-5" />}
                   </div>
                   {index < STEPS.length - 1 && (
-                    <div
-                      className={`flex-1 h-1 mx-2 ${
-                        isCompleted ? 'bg-green-500' : 'bg-gray-200'
-                      }`}
-                    />
+                    <div className={`flex-1 h-1 mx-2 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`} />
                   )}
                 </div>
-                <span
-                  className={`text-xs mt-2 text-center ${
-                    isCurrent ? 'text-blue-600 font-medium' : 'text-gray-500'
-                  }`}
-                >
+                <span className={`text-xs mt-2 text-center ${isCurrent ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
                   {step.name}
                 </span>
               </div>
@@ -302,27 +239,16 @@ export default function OnboardingPage() {
           {currentStep === 0 && (
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Company Name *
-                </label>
-                <input
-                  type="text"
-                  value={businessProfile.company_name}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
+                <input type="text" value={businessProfile.company_name}
                   onChange={(e) => setBusinessProfile({ ...businessProfile, company_name: e.target.value })}
-                  placeholder="Acme Inc."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                  placeholder="Acme Inc." className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Business Type *
-                </label>
-                <select
-                  value={businessProfile.business_type}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Business Type *</label>
+                <select value={businessProfile.business_type}
                   onChange={(e) => setBusinessProfile({ ...businessProfile, business_type: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="">Select your business type</option>
                   <option value="ecommerce">E-commerce / Retail</option>
                   <option value="saas">SaaS / Software</option>
@@ -335,56 +261,32 @@ export default function OnboardingPage() {
                   <option value="other">Other</option>
                 </select>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Business Description *
-                </label>
-                <textarea
-                  value={businessProfile.business_description}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Business Description *</label>
+                <textarea value={businessProfile.business_description}
                   onChange={(e) => setBusinessProfile({ ...businessProfile, business_description: e.target.value })}
-                  placeholder="Describe what your business does, your main products/services, and what makes you unique..."
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">This helps the AI understand your business context</p>
+                  placeholder="Describe what your business does..." rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Audience
-                </label>
-                <input
-                  type="text"
-                  value={businessProfile.target_audience}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
+                <input type="text" value={businessProfile.target_audience}
                   onChange={(e) => setBusinessProfile({ ...businessProfile, target_audience: e.target.value })}
-                  placeholder="e.g., Small business owners, Enterprise companies, Consumers aged 25-45"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                  placeholder="e.g., Small business owners, Enterprise companies"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Products/Services
-                </label>
-                <textarea
-                  value={businessProfile.products_services}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Products/Services</label>
+                <textarea value={businessProfile.products_services}
                   onChange={(e) => setBusinessProfile({ ...businessProfile, products_services: e.target.value })}
-                  placeholder="List your main products or services with brief descriptions and pricing if applicable..."
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                  placeholder="List your main products or services..." rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Timezone
-                </label>
-                <select
-                  value={businessProfile.timezone}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+                <select value={businessProfile.timezone}
                   onChange={(e) => setBusinessProfile({ ...businessProfile, timezone: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="UTC">UTC</option>
                   <option value="America/New_York">Eastern Time (US)</option>
                   <option value="America/Chicago">Central Time (US)</option>
@@ -413,58 +315,33 @@ export default function OnboardingPage() {
                   <li>4. Copy your credentials below</li>
                 </ol>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Twilio Account SID *
-                </label>
-                <input
-                  type="text"
-                  value={twilioSetup.twilio_account_sid}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Twilio Account SID *</label>
+                <input type="text" value={twilioSetup.twilio_account_sid}
                   onChange={(e) => setTwilioSetup({ ...twilioSetup, twilio_account_sid: e.target.value })}
                   placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                />
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Twilio Auth Token *
-                </label>
-                <input
-                  type="password"
-                  value={twilioSetup.twilio_auth_token}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Twilio Auth Token *</label>
+                <input type="password" value={twilioSetup.twilio_auth_token}
                   onChange={(e) => setTwilioSetup({ ...twilioSetup, twilio_auth_token: e.target.value })}
                   placeholder="Your auth token"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                />
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  WhatsApp Number *
-                </label>
-                <input
-                  type="text"
-                  value={twilioSetup.twilio_whatsapp_number}
+                <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number *</label>
+                <input type="text" value={twilioSetup.twilio_whatsapp_number}
                   onChange={(e) => setTwilioSetup({ ...twilioSetup, twilio_whatsapp_number: e.target.value })}
                   placeholder="+14155238886 (Twilio sandbox number)"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Include country code with + prefix</p>
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-              
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <h3 className="font-medium text-yellow-900 mb-2">⚠️ Important: Configure Webhook URL</h3>
-                <p className="text-sm text-yellow-800 mb-3">
-                  In your Twilio Console, set the webhook URL to:
-                </p>
+                <p className="text-sm text-yellow-800 mb-3">In your Twilio Console, set the webhook URL to:</p>
                 <div className="flex items-center gap-2 bg-white rounded-lg p-3 border">
                   <code className="flex-1 text-sm text-gray-800 break-all">{webhookUrl}</code>
-                  <button
-                    onClick={() => copyToClipboard(webhookUrl)}
-                    className="p-2 hover:bg-gray-100 rounded"
-                  >
+                  <button onClick={() => copyToClipboard(webhookUrl)} className="p-2 hover:bg-gray-100 rounded">
                     {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-500" />}
                   </button>
                 </div>
@@ -476,41 +353,28 @@ export default function OnboardingPage() {
           {currentStep === 2 && (
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  AI Personality
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">AI Personality</label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { value: 'professional', label: 'Professional', desc: 'Formal and business-like' },
                     { value: 'friendly', label: 'Friendly', desc: 'Warm and approachable' },
                     { value: 'casual', label: 'Casual', desc: 'Relaxed and conversational' },
                   ].map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
+                    <button key={option.value} type="button"
                       onClick={() => setAiConfig({ ...aiConfig, ai_personality: option.value })}
                       className={`p-4 border-2 rounded-lg text-left transition-colors ${
-                        aiConfig.ai_personality === option.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
+                        aiConfig.ai_personality === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
                       <div className="font-medium text-gray-900">{option.label}</div>
                       <div className="text-xs text-gray-500">{option.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Primary Language
-                </label>
-                <select
-                  value={aiConfig.ai_language}
-                  onChange={(e) => setAiConfig({ ...aiConfig, ai_language: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
+                <label className="block text-sm font-medium text-gray-700 mb-2">Primary Language</label>
+                <select value={aiConfig.ai_language} onChange={(e) => setAiConfig({ ...aiConfig, ai_language: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="en">English</option>
                   <option value="es">Spanish</option>
                   <option value="fr">French</option>
@@ -521,33 +385,17 @@ export default function OnboardingPage() {
                   <option value="hi">Hindi</option>
                 </select>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Welcome Greeting *
-                </label>
-                <textarea
-                  value={aiConfig.ai_greeting}
-                  onChange={(e) => setAiConfig({ ...aiConfig, ai_greeting: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Welcome Greeting *</label>
+                <textarea value={aiConfig.ai_greeting} onChange={(e) => setAiConfig({ ...aiConfig, ai_greeting: e.target.value })}
                   placeholder={`Hi! 👋 Welcome to ${businessProfile.company_name || '[Your Company]'}. I'm your AI assistant. How can I help you today?`}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">This is the first message new contacts receive</p>
+                  rows={3} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fallback Message
-                </label>
-                <textarea
-                  value={aiConfig.ai_fallback_message}
-                  onChange={(e) => setAiConfig({ ...aiConfig, ai_fallback_message: e.target.value })}
-                  placeholder="I'm not sure I understand. Could you please rephrase that? Or would you like me to connect you with a human agent?"
-                  rows={2}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Used when the AI doesn't understand the request</p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fallback Message</label>
+                <textarea value={aiConfig.ai_fallback_message} onChange={(e) => setAiConfig({ ...aiConfig, ai_fallback_message: e.target.value })}
+                  placeholder="I'm not sure I understand. Could you please rephrase that?"
+                  rows={2} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
           )}
@@ -555,13 +403,6 @@ export default function OnboardingPage() {
           {/* Step 3: Calendar Setup */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-gray-600">
-                  Connect a calendar to let the AI check availability and book appointments automatically.
-                  <span className="text-gray-400 ml-1">(Optional - you can set this up later)</span>
-                </p>
-              </div>
-              
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-start gap-3">
                   <svg className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -570,9 +411,7 @@ export default function OnboardingPage() {
                   <div>
                     <h4 className="font-semibold text-gray-900 mb-1">In-App Calendar Ready</h4>
                     <p className="text-sm text-gray-700">
-                      Your calendar is built-in and ready to use! The AI will automatically check availability 
-                      and book appointments using your dashboard calendar. Configure your availability settings 
-                      in the Calendar section after setup.
+                      Your calendar is built-in and ready to use. Configure availability in the Calendar section after setup.
                     </p>
                   </div>
                 </div>
@@ -584,14 +423,9 @@ export default function OnboardingPage() {
           {currentStep === 4 && (
             <div className="space-y-6">
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-orange-800">
-                  Configure how you want to be notified when the AI needs human assistance.
-                  At least one notification channel is recommended.
-                </p>
+                <p className="text-sm text-orange-800">Configure how you want to be notified when the AI needs human assistance.</p>
               </div>
-              
               <div className="space-y-4">
-                {/* Dashboard */}
                 <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
                   <div className="flex items-center gap-3">
                     <MessageSquare className="h-5 w-5 text-blue-600" />
@@ -600,18 +434,10 @@ export default function OnboardingPage() {
                       <p className="text-sm text-gray-500">Real-time notifications in your dashboard</p>
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={handoffSetup.channels.dashboard}
-                    onChange={(e) => setHandoffSetup({
-                      ...handoffSetup,
-                      channels: { ...handoffSetup.channels, dashboard: e.target.checked }
-                    })}
-                    className="h-5 w-5 text-blue-600 rounded"
-                  />
+                  <input type="checkbox" checked={handoffSetup.channels.dashboard}
+                    onChange={(e) => setHandoffSetup({ ...handoffSetup, channels: { ...handoffSetup.channels, dashboard: e.target.checked } })}
+                    className="h-5 w-5 text-blue-600 rounded" />
                 </label>
-                
-                {/* Email */}
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <label className="flex items-center justify-between cursor-pointer">
                     <div className="flex items-center gap-3">
@@ -621,31 +447,16 @@ export default function OnboardingPage() {
                         <p className="text-sm text-gray-500">Detailed alerts with conversation summary</p>
                       </div>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={handoffSetup.channels.email}
-                      onChange={(e) => setHandoffSetup({
-                        ...handoffSetup,
-                        channels: { ...handoffSetup.channels, email: e.target.checked }
-                      })}
-                      className="h-5 w-5 text-blue-600 rounded"
-                    />
+                    <input type="checkbox" checked={handoffSetup.channels.email}
+                      onChange={(e) => setHandoffSetup({ ...handoffSetup, channels: { ...handoffSetup.channels, email: e.target.checked } })}
+                      className="h-5 w-5 text-blue-600 rounded" />
                   </label>
                   {handoffSetup.channels.email && (
-                    <input
-                      type="email"
-                      value={handoffSetup.recipients.email}
-                      onChange={(e) => setHandoffSetup({
-                        ...handoffSetup,
-                        recipients: { ...handoffSetup.recipients, email: e.target.value }
-                      })}
-                      placeholder="your@email.com"
-                      className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
+                    <input type="email" value={handoffSetup.recipients.email}
+                      onChange={(e) => setHandoffSetup({ ...handoffSetup, recipients: { ...handoffSetup.recipients, email: e.target.value } })}
+                      placeholder="your@email.com" className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                   )}
                 </div>
-                
-                {/* WhatsApp */}
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <label className="flex items-center justify-between cursor-pointer">
                     <div className="flex items-center gap-3">
@@ -655,27 +466,14 @@ export default function OnboardingPage() {
                         <p className="text-sm text-gray-500">Instant alerts to your WhatsApp</p>
                       </div>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={handoffSetup.channels.whatsapp}
-                      onChange={(e) => setHandoffSetup({
-                        ...handoffSetup,
-                        channels: { ...handoffSetup.channels, whatsapp: e.target.checked }
-                      })}
-                      className="h-5 w-5 text-blue-600 rounded"
-                    />
+                    <input type="checkbox" checked={handoffSetup.channels.whatsapp}
+                      onChange={(e) => setHandoffSetup({ ...handoffSetup, channels: { ...handoffSetup.channels, whatsapp: e.target.checked } })}
+                      className="h-5 w-5 text-blue-600 rounded" />
                   </label>
                   {handoffSetup.channels.whatsapp && (
-                    <input
-                      type="tel"
-                      value={handoffSetup.recipients.whatsapp}
-                      onChange={(e) => setHandoffSetup({
-                        ...handoffSetup,
-                        recipients: { ...handoffSetup.recipients, whatsapp: e.target.value }
-                      })}
-                      placeholder="+1234567890"
-                      className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
+                    <input type="tel" value={handoffSetup.recipients.whatsapp}
+                      onChange={(e) => setHandoffSetup({ ...handoffSetup, recipients: { ...handoffSetup.recipients, whatsapp: e.target.value } })}
+                      placeholder="+1234567890" className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                   )}
                 </div>
               </div>
@@ -684,47 +482,28 @@ export default function OnboardingPage() {
 
           {/* Navigation */}
           <div className="flex justify-between mt-8 pt-6 border-t">
-            <button
-              onClick={handleBack}
-              disabled={currentStep === 0}
+            <button onClick={handleBack} disabled={currentStep === 0}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-                currentStep === 0
-                  ? 'text-gray-300 cursor-not-allowed'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
+                currentStep === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'
+              }`}>
               <ChevronLeft className="h-4 w-4" />
               Back
             </button>
-            
-            <button
-              onClick={handleNext}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
+            <button onClick={handleNext} disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : currentStep === STEPS.length - 1 ? (
-                <>
-                  Complete Setup
-                  <CheckCircle className="h-4 w-4" />
-                </>
+                <><span>Complete Setup</span><CheckCircle className="h-4 w-4" /></>
               ) : (
-                <>
-                  Continue
-                  <ChevronRight className="h-4 w-4" />
-                </>
+                <><span>Continue</span><ChevronRight className="h-4 w-4" /></>
               )}
             </button>
           </div>
         </div>
 
-        {/* Skip onboarding link */}
         <div className="text-center mt-6">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-gray-500 hover:text-gray-700">
             Skip setup and go to dashboard →
           </button>
         </div>

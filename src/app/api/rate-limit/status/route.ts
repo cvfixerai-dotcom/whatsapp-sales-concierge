@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { rateLimiter } from '@/lib/services/rate-limiter';
+import { getSessionUser } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
   try {
     // Verify user is authenticated
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const tenantId = session.user.tenantId as string;
+    const tenantId = sessionUser.tenantId as string;
     const { searchParams } = new URL(request.url);
     const phoneNumber = searchParams.get('phone');
 
@@ -71,15 +70,15 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // Verify user is authenticated and is admin/owner
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId || !['owner', 'admin'].includes(session.user.role as string)) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json(
         { error: 'Unauthorized. Admin access required.' },
         { status: 403 }
       );
     }
 
-    const tenantId = session.user.tenantId as string;
+    const tenantId = sessionUser.tenantId as string;
     
     // Reset rate limits for tenant
     await rateLimiter.resetRateLimits(tenantId);

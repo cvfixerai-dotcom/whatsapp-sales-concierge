@@ -1,37 +1,26 @@
 // @ts-nocheck
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/db/client';
 import { redirect } from 'next/navigation';
+import { getSessionUser } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/db/client';
 import DashboardShell from './DashboardShell';
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  // 1. Auth check — unauthenticated users go to login
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.tenantId) {
-    redirect('/auth/login');
-  }
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // 1. Auth check
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) redirect('/auth/login');
 
-  const tenantId = session.user.tenantId as string;
+  const { tenantId } = sessionUser;
 
   // 2. Fetch tenant
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select(
-      'setup_completed, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit, subscription_tier, trial_start_date'
-    )
+    .select('setup_completed, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit, subscription_tier, trial_start_date')
     .eq('id', tenantId)
     .single();
 
   if (tenant) {
     // Guard A: setup not completed → onboarding
-    if (!tenant.setup_completed) {
-      redirect('/onboarding');
-    }
+    if (!tenant.setup_completed) redirect('/onboarding');
 
     // Guard B: trial checks
     if (tenant.subscription_status === 'trial') {
@@ -39,10 +28,7 @@ export default async function DashboardLayout({
 
       // B1: trial expired by date
       if (tenant.trial_end_date && new Date(tenant.trial_end_date) < now) {
-        await supabaseAdmin
-          .from('tenants')
-          .update({ subscription_status: 'past_due' })
-          .eq('id', tenantId);
+        await supabaseAdmin.from('tenants').update({ subscription_status: 'past_due' }).eq('id', tenantId);
         redirect('/dashboard/billing?reason=trial_expired');
       }
 
@@ -58,42 +44,22 @@ export default async function DashboardLayout({
         .gte('created_at', trialStart);
 
       if ((trialUsed || 0) >= trialLimit) {
-        await supabaseAdmin
-          .from('tenants')
-          .update({ subscription_status: 'past_due' })
-          .eq('id', tenantId);
+        await supabaseAdmin.from('tenants').update({ subscription_status: 'past_due' }).eq('id', tenantId);
         redirect('/dashboard/billing?reason=trial_limit');
       }
     }
 
     // Guard C: past_due → billing
-    if (tenant.subscription_status === 'past_due') {
-      redirect('/dashboard/billing');
-    }
+    if (tenant.subscription_status === 'past_due') redirect('/dashboard/billing');
   }
 
-  // Compute trial countdown for banner (only passed if still in trial)
-  let trialInfo: {
-    status: string;
-    daysRemaining: number | null;
-    trialLimit: number | null;
-    usedCount: number;
-  } | null = null;
-
+  // Compute trial countdown for banner
+  let trialInfo: { status: string; daysRemaining: number | null; trialLimit: number | null; usedCount: number } | null = null;
   if (tenant?.subscription_status === 'trial' && tenant.trial_end_date) {
     const msRemaining = new Date(tenant.trial_end_date).getTime() - Date.now();
     const daysRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60 * 24)));
-    trialInfo = {
-      status: 'trial',
-      daysRemaining,
-      trialLimit: tenant.trial_conversation_limit || 25,
-      usedCount: 0,
-    };
+    trialInfo = { status: 'trial', daysRemaining, trialLimit: tenant.trial_conversation_limit || 25, usedCount: 0 };
   }
 
-  return (
-    <DashboardShell trialInfo={trialInfo}>
-      {children}
-    </DashboardShell>
-  );
+  return <DashboardShell trialInfo={trialInfo}>{children}</DashboardShell>;
 }

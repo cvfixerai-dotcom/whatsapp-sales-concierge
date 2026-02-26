@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-browser';
 import { StatsSkeleton, ListSkeleton } from '@/components/skeletons';
 import { useRouter } from 'next/navigation';
 import {
@@ -56,7 +56,9 @@ const STATUS_STYLES = {
 };
 
 export default function CalendarPage() {
-  const { data: session, status } = useSession();
+  const [_authReady, setAuthReady] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
+  const status = _authReady ? 'authenticated' : 'loading';
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [blocks, setBlocks] = useState<BlockedSlot[]>([]);

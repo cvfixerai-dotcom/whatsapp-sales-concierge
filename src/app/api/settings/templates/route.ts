@@ -6,21 +6,22 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { data: tenant, error } = await supabaseAdmin
       .from('tenants')
       .select('whatsapp_templates')
-      .eq('id', session.user.tenantId)
+      .eq('id', sessionUser.tenantId)
       .single();
 
     if (error || !tenant) {
@@ -44,8 +45,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -62,14 +63,14 @@ export async function POST(request: NextRequest) {
         whatsapp_templates: templates,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', session.user.tenantId);
+      .eq('id', sessionUser.tenantId);
 
     if (error) {
       console.error('[Templates] Update error:', error);
       return NextResponse.json({ error: 'Failed to update templates' }, { status: 500 });
     }
 
-    console.log(`[Templates] Updated for tenant ${session.user.tenantId}`);
+    console.log(`[Templates] Updated for tenant ${sessionUser.tenantId}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[Templates] POST error:', error);

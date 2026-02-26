@@ -1,23 +1,24 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { supabaseAdmin } from '@/lib/db/client';
+import { getSessionUser } from '@/lib/supabase-server';
 
 /**
  * GET /api/calendar/availability — fetch tenant availability settings
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { data: settings } = await supabaseAdmin
       .from('availability_settings')
       .select('*')
-      .eq('tenant_id', session.user.tenantId)
+      .eq('tenant_id', sessionUser.tenantId)
       .single();
 
     // Return settings or defaults
@@ -45,13 +46,13 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.tenantId) {
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
-    const tenantId = session.user.tenantId;
+    const { tenantId } = sessionUser;
 
     // Check if settings exist
     const { data: existing } = await supabaseAdmin

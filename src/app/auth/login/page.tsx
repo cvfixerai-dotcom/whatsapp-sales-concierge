@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { signIn, getSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase-browser';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,21 +18,21 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await signIn('credentials', {
-        email: email.toLowerCase(),
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
         password,
-        redirect: false,
       });
 
-      if (result?.error) {
-        setError('Invalid email or password');
-      } else {
-        const session = await getSession();
-        if (session) {
-          router.push('/dashboard');
-        }
+      if (signInError) {
+        setError(signInError.message === 'Email not confirmed'
+          ? 'Please confirm your email before signing in.'
+          : 'Invalid email or password');
+        return;
       }
-    } catch (error) {
+
+      router.push('/onboarding');
+      router.refresh();
+    } catch {
       setError('An error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -94,7 +94,6 @@ export default function LoginPage() {
       {/* Right Panel — Form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white">
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
           <div className="lg:hidden mb-8">
             <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center">
@@ -111,70 +110,33 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome back</h1>
             <p className="text-gray-500">Sign in to your dashboard</p>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
-            
+
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email address</label>
+              <input id="email" name="email" type="email" autoComplete="email" required
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+                placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <Link href="/auth/forgot-password" className="text-xs text-blue-600 hover:text-blue-700">
-                  Forgot password?
-                </Link>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+                <Link href="/auth/forgot-password" className="text-xs text-blue-600 hover:text-blue-700">Forgot password?</Link>
               </div>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
+              <input id="password" name="password" type="password" autoComplete="current-password" required
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+                placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
 
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-600">
-                Remember me
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
-            >
+            <button type="submit" disabled={loading}
+              className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
@@ -185,9 +147,7 @@ export default function LoginPage() {
 
             <p className="text-center text-sm text-gray-500">
               Don&apos;t have an account?{' '}
-              <Link href="/auth/signup" className="text-blue-600 font-medium hover:text-blue-700">
-                Start free trial
-              </Link>
+              <Link href="/auth/signup" className="text-blue-600 font-medium hover:text-blue-700">Start free trial</Link>
             </p>
           </form>
         </div>
