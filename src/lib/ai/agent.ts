@@ -480,7 +480,13 @@ export class AIAgent {
         };
 
         // Execute the tool
-        const result = await executeTool(toolCall.name, parameters, context);
+        let result = await executeTool(toolCall.name, parameters, context);
+        
+        // Smart retry logic for check_calendar failures
+        if (toolCall.name === 'check_calendar' && !result.success) {
+          console.log('[AI Agent] check_calendar failed, attempting retry with wider date range');
+          result = await this.retryCheckCalendar(parameters, context, result.error);
+        }
         
         // Store result
         toolCall.result = result;
@@ -499,6 +505,67 @@ export class AIAgent {
         };
       }
     }
+  }
+
+  /**
+   * Retry check_calendar with exponential backoff and wider date ranges
+   */
+  private async retryCheckCalendar(
+    parameters: any,
+    context: ConversationContext,
+    previousError?: string
+  ): Promise<any> {
+    const maxRetries = 2;
+    const retryDelays = [500, 1000]; // ms
+    const daysAheadProgression = [14, 30]; // Wider search windows
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        
+        // Retry with wider date range
+        const retryParams = {
+          ...parameters,
+          daysAhead: daysAheadProgression[attempt],
+          preferredDate: undefined, // Clear specific date preference to widen search
+        };
+        
+        console.log(`[AI Agent] Retry ${attempt + 1}/${maxRetries}: searching ${daysAheadProgression[attempt]} days ahead`);
+        
+        const result = await executeTool('check_calendar', retryParams, context);
+        
+        if (result.success && result.available_slots?.length > 0) {
+          console.log(`[AI Agent] Retry ${attempt + 1} succeeded with ${result.available_slots.length} slots`);
+          return result;
+        }
+        
+        console.warn(`[AI Agent] Retry ${attempt + 1} returned no slots`);
+      } catch (error) {
+        console.error(`[AI Agent] Retry ${attempt + 1} failed:`, error);
+      }
+    }
+    
+    // All retries exhausted - mark for human handoff
+    console.error('[AI Agent] All calendar retry attempts failed, escalating to human');
+    
+    // Update contact to need human assistance
+    try {
+      await executeTool('update_lead', {
+        tenantId: context.tenant.id,
+        contactId: context.contact.id,
+        conversationId: context.conversation.id,
+        notes: 'Calendar unavailable - needs human scheduling assistance',
+      }, context);
+    } catch (updateError) {
+      console.error('[AI Agent] Failed to update lead after calendar retry failure:', updateError);
+    }
+    
+    return {
+      success: false,
+      error: `No available appointment slots found. ${previousError || 'Calendar service unavailable.'}`,
+      needs_human: true,
+    };
   }
 
   /**

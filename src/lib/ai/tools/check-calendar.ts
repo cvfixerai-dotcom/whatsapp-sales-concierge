@@ -7,6 +7,7 @@ interface CheckCalendarParams {
   contactId?: string;
   preferredDate?: string;
   preferredTime?: string;
+  daysAhead?: number;
 }
 
 interface CalendarSlot {
@@ -111,13 +112,13 @@ async function storeLastSlots(contactId: string | undefined, slots: any[], timez
   }
 }
 
-export async function checkCalendar({ tenantId, contactId, preferredDate, preferredTime }: CheckCalendarParams): Promise<{
+export async function checkCalendar({ tenantId, contactId, preferredDate, preferredTime, daysAhead }: CheckCalendarParams): Promise<{
   success: boolean;
   available_slots?: CalendarSlot[];
   error?: string;
 }> {
   try {
-    console.log(`[Tool: checkCalendar] Checking availability for tenant ${tenantId}, preferredDate=${preferredDate || 'none'}`);
+    console.log(`[Tool: checkCalendar] Checking availability for tenant ${tenantId}, preferredDate=${preferredDate || 'none'}, daysAhead=${daysAhead || 'default'}`);
 
     const settings = await getAvailabilitySettings(tenantId);
     const timezone = settings?.timezone || 'Asia/Dubai';
@@ -125,7 +126,7 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
     const startDate = parsedPreferred && !Number.isNaN(parsedPreferred.getTime())
       ? parsedPreferred
       : new Date();
-    const searchDays = settings?.booking_window_days || 7;
+    const searchDays = daysAhead || settings?.booking_window_days || 7;
     const slots = await getAvailableSlots(tenantId, startDate, searchDays);
     const preferredInput = [preferredDate, preferredTime].filter(Boolean).join(' ').toLowerCase();
     const preferredTimeInput = (preferredTime || '').toLowerCase();

@@ -17,7 +17,7 @@ export const AI_TOOLS = {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Customer name if revealed' },
-        email: { type: 'string', description: 'Customer email if revealed' },
+        email: { type: 'string', description: 'Customer email if revealed', pattern: '^[^@]+@[^@]+\\.[^@]+$' },
         temperature: { type: 'string', enum: ['hot', 'warm', 'cold', 'new'], description: 'Lead temperature based on buying signals' },
         timeline: { type: 'string', enum: ['urgent', 'this-week', 'this-month', 'exploring'], description: 'Purchase/service timeline' },
         budget_range: { type: 'string', description: 'Budget range if mentioned' },
@@ -25,6 +25,7 @@ export const AI_TOOLS = {
         notes: { type: 'string', description: 'Any additional qualifying info from the conversation' },
       },
       required: [],
+      additionalProperties: false,
     },
     handler: 'updateLead',
   },
@@ -37,8 +38,10 @@ export const AI_TOOLS = {
       properties: {
         preferredDate: { type: 'string', description: 'Customer preferred date if mentioned (ISO format or natural language)' },
         preferredTime: { type: 'string', description: 'Customer preferred time if mentioned' },
+        daysAhead: { type: 'number', description: 'Number of days to search ahead (default 7)', minimum: 1, maximum: 60 },
       },
       required: [],
+      additionalProperties: false,
     },
     handler: 'checkCalendar',
   },
@@ -49,9 +52,10 @@ export const AI_TOOLS = {
     parameters: {
       type: 'object',
       properties: {
-        slotTime: { type: 'string', description: 'The confirmed appointment time in ISO 8601 format' },
+        slotTime: { type: 'string', description: 'The confirmed appointment time in ISO 8601 format', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}' },
       },
       required: ['slotTime'],
+      additionalProperties: false,
     },
     handler: 'bookAppointment',
   },
@@ -65,6 +69,7 @@ export const AI_TOOLS = {
         appointmentId: { type: 'string', description: 'Specific appointment ID to cancel (optional, will cancel most recent if not provided)' },
       },
       required: [],
+      additionalProperties: false,
     },
     handler: 'cancelAppointment',
   },
@@ -75,12 +80,13 @@ export const AI_TOOLS = {
     parameters: {
       type: 'object',
       properties: {
-        to: { type: 'string', description: 'Recipient email address' },
+        to: { type: 'string', description: 'Recipient email address', pattern: '^[^@]+@[^@]+\\.[^@]+$' },
         template: { type: 'string', enum: ['property_details', 'service_info', 'pricing', 'booking_confirmation', 'follow_up'], description: 'Email template to use' },
-        data: { type: 'object', description: 'Template data like property details, pricing, etc.' },
+        data: { type: 'object', description: 'Template data like property details, pricing, etc.', additionalProperties: true },
         language: { type: 'string', enum: ['en', 'ar'], description: 'Email language' },
       },
       required: ['to', 'template'],
+      additionalProperties: false,
     },
     handler: 'sendEmail',
   },
@@ -145,13 +151,14 @@ export function getAvailableTools(provider: string = 'anthropic'): any[] {
       input_schema: tool.parameters,
     }));
   } else {
-    // OpenAI format
+    // OpenAI format with strict mode
     return Object.values(AI_TOOLS).map(tool => ({
       type: 'function',
       function: {
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters,
+        strict: true,  // Enable strict schema validation
       },
     }));
   }
