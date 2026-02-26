@@ -53,14 +53,14 @@ export async function POST(request: NextRequest) {
       .insert({
         company_name: companyName.trim(),
         owner_id: authUserId,
-        subscription_tier: 'starter',
+        subscription_tier: 'trial',
         subscription_status: 'trial',
         trial_start_date: trialStart.toISOString(),
         trial_end_date: trialEnd.toISOString(),
         trial_conversation_limit: 25,
-        monthly_conversation_limit: 500,
-        ai_provider: 'anthropic',
-        ai_model: 'claude-3-5-sonnet-20241022',
+        monthly_conversation_limit: 25,
+        ai_provider: 'openai',
+        ai_model: 'gpt-4o',
         business_hours: {},
         setup_completed: false,
       })

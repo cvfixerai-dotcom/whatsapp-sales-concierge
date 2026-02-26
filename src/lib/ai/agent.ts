@@ -344,7 +344,7 @@ export class AIAgent {
   }
 
   /**
-   * Call AI provider (Claude/GPT)
+   * Call AI provider — OpenAI primary, Anthropic fallback
    */
   private async callAI(params: {
     provider: string;
@@ -357,47 +357,58 @@ export class AIAgent {
     tenant: any;
     contact: any;
   }): Promise<AIResponse> {
-    try {
-      // Get API key from environment based on provider
-      let apiKey = '';
-      if (params.provider === 'anthropic') {
-        apiKey = process.env.ANTHROPIC_API_KEY || '';
-      } else if (params.provider === 'openai') {
-        apiKey = process.env.OPENAI_API_KEY || '';
+    const callOptions = {
+      systemPrompt: params.systemPrompt,
+      messages: params.messages,
+      newMessage: params.newMessage,
+      tools: params.tools,
+      language: params.language,
+      temperature: 0.7,
+      maxTokens: 1000,
+    };
+
+    // --- Primary: OpenAI ---
+    const openaiKey = process.env.OPENAI_API_KEY || '';
+    if (openaiKey) {
+      try {
+        const openaiModel = (params.provider === 'openai' && params.model) ? params.model : 'gpt-4o';
+        const { OpenAIProvider } = require('./providers/openai');
+        const openaiProvider = new OpenAIProvider(openaiKey, openaiModel);
+        const response = await openaiProvider.call(callOptions);
+        console.log('[AI Agent] OpenAI response received');
+        return response;
+      } catch (openaiError) {
+        console.warn('[AI Agent] OpenAI call failed, falling back to Anthropic:', openaiError);
       }
-
-      if (!apiKey) {
-        throw new Error(`API key not configured for provider: ${params.provider}`);
-      }
-
-      // Get the AI provider
-      const provider = getAIProvider(params.provider, apiKey, params.model);
-      
-      // Call the AI
-      const response = await provider.call({
-        systemPrompt: params.systemPrompt,
-        messages: params.messages,
-        newMessage: params.newMessage,
-        tools: params.tools,
-        language: params.language,
-        temperature: 0.7,
-        maxTokens: 1000,
-      });
-
-      return response;
-    } catch (error) {
-      console.error('AI provider error:', error);
-      
-      // Return a fallback response
-      const fallbackMessage = this.generateFallbackResponse(params.newMessage, params.language);
-      return {
-        message: fallbackMessage,
-        content: fallbackMessage,
-        confidence: 0.1,
-        intent: 'error',
-        sentiment: 'neutral',
-      };
+    } else {
+      console.warn('[AI Agent] OPENAI_API_KEY not set, trying Anthropic directly');
     }
+
+    // --- Fallback: Anthropic ---
+    const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
+    if (anthropicKey) {
+      try {
+        const anthropicModel = (params.provider === 'anthropic' && params.model) ? params.model : 'claude-3-5-sonnet-20241022';
+        const { AnthropicProvider } = require('./providers/anthropic');
+        const anthropicProvider = new AnthropicProvider(anthropicKey, anthropicModel);
+        const response = await anthropicProvider.call(callOptions);
+        console.log('[AI Agent] Anthropic fallback response received');
+        return response;
+      } catch (anthropicError) {
+        console.error('[AI Agent] Anthropic fallback also failed:', anthropicError);
+      }
+    }
+
+    // --- Hard fallback: static response ---
+    console.error('[AI Agent] All AI providers failed');
+    const fallbackMessage = this.generateFallbackResponse(params.newMessage, params.language);
+    return {
+      message: fallbackMessage,
+      content: fallbackMessage,
+      confidence: 0.1,
+      intent: 'error',
+      sentiment: 'neutral',
+    };
   }
 
   /**
@@ -449,7 +460,7 @@ export class AIAgent {
   private getAvailableTools(tenant: any): any[] {
     // Import tools dynamically
     const { getAvailableTools } = require('./tools');
-    return getAvailableTools(tenant.ai_provider || 'anthropic');
+    return getAvailableTools(tenant.ai_provider || 'openai');
   }
 
   /**

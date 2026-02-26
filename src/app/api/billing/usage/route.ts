@@ -54,10 +54,10 @@ export async function GET(request: NextRequest) {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
     const response = {
-      subscription_tier: tenant.subscription_tier || 'starter',
+      subscription_tier: tenant.subscription_tier || 'trial',
       subscription_status: tenant.subscription_status || 'trial',
       conversation_count: usage?.conversation_count || 0,
-      monthly_conversation_limit: tenant.monthly_conversation_limit || 500,
+      monthly_conversation_limit: tenant.monthly_conversation_limit || 25,
       topup_conversations_remaining: usage?.topup_conversations_remaining || 0,
       payments,
       current_month_start: monthStart,

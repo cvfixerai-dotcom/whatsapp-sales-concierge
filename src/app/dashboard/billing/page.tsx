@@ -166,6 +166,7 @@ export default function BillingPage() {
 
   const getTierIcon = (tierName: string) => {
     switch (tierName) {
+      case 'trial': return <Zap className="w-6 h-6" />;
       case 'starter': return <Rocket className="w-6 h-6" />;
       case 'growth': return <TrendingUp className="w-6 h-6" />;
       case 'scale': return <Crown className="w-6 h-6" />;
@@ -180,11 +181,13 @@ export default function BillingPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Current Plan</h2>
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                usage.subscription_status === 'active' 
+                usage.subscription_status === 'active'
                   ? 'bg-green-100 text-green-800'
+                  : usage.subscription_status === 'trial'
+                  ? 'bg-blue-100 text-blue-800'
                   : 'bg-red-100 text-red-800'
               }`}>
-                {usage.subscription_status}
+                {usage.subscription_status === 'trial' ? 'Free Trial' : usage.subscription_status}
               </span>
             </div>
             
@@ -335,8 +338,8 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Upgrade Plans */}
-          {upgradePath.nextTier && (
+          {/* Upgrade Plans — only show for non-scale tiers */}
+          {tier !== 'scale' && (
             <div className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Upgrade Your Plan</h2>
               

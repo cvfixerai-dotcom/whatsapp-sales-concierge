@@ -23,6 +23,11 @@ import {
   Users,
   Bot,
   Sparkles,
+  Clock,
+  Briefcase,
+  HelpCircle,
+  Plus,
+  ChevronDown,
 } from 'lucide-react';
 
 interface TenantSettings {
@@ -63,7 +68,14 @@ function SettingsPageContent() {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations'>('ai');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations' | 'business'>('ai');
+
+  // Business settings state
+  const [businessHours, setBusinessHours] = useState<Record<string, { open: string; close: string; closed: boolean }>>({});
+  const [businessTimezone, setBusinessTimezone] = useState('Asia/Dubai');
+  const [services, setServices] = useState<Array<{ name: string; description: string; duration_minutes: number; price?: string }>>([]);
+  const [faqs, setFaqs] = useState<Array<{ question: string; answer: string }>>([]);
+  const [savingBusiness, setSavingBusiness] = useState(false);
 
   // Integrations state
   const [crmWebhookUrl, setCrmWebhookUrl] = useState('');
@@ -113,6 +125,9 @@ function SettingsPageContent() {
   const [escalationTimeout, setEscalationTimeout] = useState(5);
   const [escalationChannel, setEscalationChannel] = useState<'email' | 'whatsapp' | 'telegram'>('email');
 
+  const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const DEFAULT_HOURS = { open: '09:00', close: '18:00', closed: false };
+
   useEffect(() => {
     if (_authReady) {
       fetchSettings();
@@ -121,6 +136,7 @@ function SettingsPageContent() {
       fetchTemplates();
       fetchTeam();
       fetchIntegrations();
+      fetchBusinessSettings();
     }
   }, [_authReady]);
 
@@ -200,6 +216,42 @@ function SettingsPageContent() {
     } finally {
       setSavingAi(false);
     }
+  }
+
+  async function fetchBusinessSettings() {
+    try {
+      const res = await fetch('/api/settings/business');
+      if (!res.ok) return;
+      const data = await res.json();
+      const hours: Record<string, { open: string; close: string; closed: boolean }> = {};
+      for (const day of DAYS) {
+        hours[day] = data.business_hours?.[day] ?? { ...DEFAULT_HOURS };
+      }
+      if (data.business_hours?.timezone) setBusinessTimezone(data.business_hours.timezone);
+      setBusinessHours(hours);
+      setServices(Array.isArray(data.services) ? data.services : []);
+      setFaqs(Array.isArray(data.faqs) ? data.faqs : []);
+    } catch (e) { console.error('Error fetching business settings:', e); }
+  }
+
+  async function handleSaveBusinessSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingBusiness(true); setMessage(null);
+    try {
+      const res = await fetch('/api/settings/business', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_hours: { ...businessHours, timezone: businessTimezone },
+          services,
+          faqs,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      setMessage({ type: 'success', text: 'Business settings saved successfully!' });
+    } catch (e) {
+      setMessage({ type: 'error', text: 'Failed to save business settings' });
+    } finally { setSavingBusiness(false); }
   }
 
   async function fetchIntegrations() {
@@ -397,6 +449,17 @@ function SettingsPageContent() {
             >
               <Bell className="inline h-4 w-4 mr-2" />
               Handoff Notifications
+            </button>
+            <button
+              onClick={() => setActiveTab('business')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'business'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Briefcase className="inline h-4 w-4 mr-2" />
+              Business
             </button>
             <button
               onClick={() => setActiveTab('team')}
@@ -805,6 +868,168 @@ function SettingsPageContent() {
                   </button>
                 </div>
               </div>
+            </div>
+          </form>
+        )}
+
+        {/* Business Settings Section */}
+        {activeTab === 'business' && (
+          <form onSubmit={handleSaveBusinessSettings}>
+            <div className="space-y-6">
+
+              {/* Business Hours */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-blue-600" />
+                    Business Hours
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">Set your weekly schedule so the AI knows when you&apos;re open</p>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+                    <select value={businessTimezone} onChange={e => setBusinessTimezone(e.target.value)}
+                      className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500">
+                      {['UTC','America/New_York','America/Chicago','America/Los_Angeles','Europe/London','Europe/Paris','Asia/Dubai','Asia/Singapore','Asia/Tokyo','Australia/Sydney'].map(tz => (
+                        <option key={tz} value={tz}>{tz}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    {DAYS.map(day => {
+                      const h = businessHours[day] ?? { open: '09:00', close: '18:00', closed: false };
+                      return (
+                        <div key={day} className="flex items-center gap-4 p-3 rounded-lg bg-gray-50">
+                          <span className="w-24 text-sm font-medium text-gray-700 capitalize">{day}</span>
+                          <label className="flex items-center gap-2 text-sm text-gray-600">
+                            <input type="checkbox" checked={!h.closed}
+                              onChange={e => setBusinessHours(prev => ({ ...prev, [day]: { ...h, closed: !e.target.checked } }))}
+                              className="h-4 w-4 text-blue-600 rounded" />
+                            Open
+                          </label>
+                          {!h.closed && (
+                            <>
+                              <input type="time" value={h.open}
+                                onChange={e => setBusinessHours(prev => ({ ...prev, [day]: { ...h, open: e.target.value } }))}
+                                className="px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white" />
+                              <span className="text-gray-400 text-sm">to</span>
+                              <input type="time" value={h.close}
+                                onChange={e => setBusinessHours(prev => ({ ...prev, [day]: { ...h, close: e.target.value } }))}
+                                className="px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white" />
+                            </>
+                          )}
+                          {h.closed && <span className="text-sm text-gray-400 italic">Closed</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Services */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-emerald-600" />
+                    Services
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">Services the AI can present and book for customers</p>
+                </div>
+                <div className="p-6 space-y-4">
+                  {(services ?? []).map((svc, i) => (
+                    <div key={i} className="p-4 border border-gray-200 rounded-lg space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Service {i + 1}</span>
+                        <button type="button" onClick={() => setServices(services.filter((_, idx) => idx !== i))}
+                          className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
+                          <input type="text" value={svc.name} required
+                            onChange={e => { const u = [...services]; u[i] = { ...u[i], name: e.target.value }; setServices(u); }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Duration (minutes)</label>
+                          <input type="number" min="5" step="5" value={svc.duration_minutes}
+                            onChange={e => { const u = [...services]; u[i] = { ...u[i], duration_minutes: parseInt(e.target.value) || 60 }; setServices(u); }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                          <input type="text" value={svc.description}
+                            onChange={e => { const u = [...services]; u[i] = { ...u[i], description: e.target.value }; setServices(u); }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Price (optional)</label>
+                          <input type="text" value={svc.price ?? ''} placeholder="e.g. $99 or Free"
+                            onChange={e => { const u = [...services]; u[i] = { ...u[i], price: e.target.value }; setServices(u); }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={() => setServices([...services, { name: '', description: '', duration_minutes: 60, price: '' }])}
+                    className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-800 font-medium">
+                    <Plus className="h-4 w-4" /> Add Service
+                  </button>
+                </div>
+              </div>
+
+              {/* FAQs */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <HelpCircle className="h-5 w-5 text-purple-600" />
+                    FAQs
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">Common questions the AI will answer automatically</p>
+                </div>
+                <div className="p-6 space-y-4">
+                  {(faqs ?? []).map((faq, i) => (
+                    <div key={i} className="p-4 border border-gray-200 rounded-lg space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">FAQ {i + 1}</span>
+                        <button type="button" onClick={() => setFaqs(faqs.filter((_, idx) => idx !== i))}
+                          className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Question *</label>
+                          <input type="text" value={faq.question} required
+                            onChange={e => { const u = [...faqs]; u[i] = { ...u[i], question: e.target.value }; setFaqs(u); }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Answer *</label>
+                          <textarea value={faq.answer} required rows={2}
+                            onChange={e => { const u = [...faqs]; u[i] = { ...u[i], answer: e.target.value }; setFaqs(u); }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={() => setFaqs([...faqs, { question: '', answer: '' }])}
+                    className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-800 font-medium">
+                    <Plus className="h-4 w-4" /> Add FAQ
+                  </button>
+                </div>
+              </div>
+
+              {/* Save */}
+              <div className="pb-6">
+                <button type="submit" disabled={savingBusiness}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  {savingBusiness ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Business Settings
+                </button>
+              </div>
+
             </div>
           </form>
         )}

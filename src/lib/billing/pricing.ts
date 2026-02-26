@@ -90,7 +90,7 @@ export function getPriceForTier(tier: string): number {
 }
 
 export function getConversationsForTier(tier: string): number {
-  return PRICING.tiers[tier]?.conversations || 500;
+  return PRICING.tiers[tier]?.conversations || 25;
 }
 
 export function calculateOverageCost(
