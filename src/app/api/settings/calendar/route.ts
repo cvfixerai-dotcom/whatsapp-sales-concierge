@@ -1,130 +1,52 @@
 // @ts-nocheck
 /**
- * Calendar Settings API
- * GET - Fetch current calendar settings
- * POST - Update calendar settings
+ * Calendar Settings API — Internal In-App Calendar Only
+ * Calendly and Google Calendar integrations have been removed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-
-
 import { supabaseAdmin } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/supabase-server';
 
-/**
- * GET /api/settings/calendar
- * Fetch current calendar settings for the tenant
- */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const sessionUser = await getSessionUser();
-    if (!sessionUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!sessionUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: tenant, error } = await supabaseAdmin
-      .from('tenants')
-      .select('calendar_provider, calendly_api_key, calendly_event_url, google_calendar_id, google_refresh_token')
-      .eq('id', sessionUser.tenantId)
-      .single();
+    const { data: settings } = await supabaseAdmin
+      .from('availability_settings')
+      .select('*')
+      .eq('tenant_id', sessionUser.tenantId)
+      .maybeSingle();
 
-    if (error || !tenant) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
-    }
-
-    // Mask the API key for security (show only last 4 chars)
-    const maskedApiKey = tenant.calendly_api_key
-      ? `${'*'.repeat(Math.max(0, tenant.calendly_api_key.length - 4))}${tenant.calendly_api_key.slice(-4)}`
-      : null;
-
-    return NextResponse.json({
-      calendar_provider: tenant.calendar_provider,
-      calendly_api_key: maskedApiKey,
-      calendly_api_key_set: !!tenant.calendly_api_key,
-      calendly_event_url: tenant.calendly_event_url,
-      google_calendar_id: tenant.google_calendar_id,
-      google_connected: !!tenant.google_refresh_token,
-    });
+    return NextResponse.json({ calendar_provider: 'inapp', availability_settings: settings ?? null });
   } catch (error) {
     console.error('[Calendar Settings] GET error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch settings' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
   }
 }
 
-/**
- * POST /api/settings/calendar
- * Update calendar settings for the tenant
- */
 export async function POST(request: NextRequest) {
   try {
     const sessionUser = await getSessionUser();
-    if (!sessionUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!sessionUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const {
-      calendar_provider,
-      calendly_api_key,
-      calendly_event_url,
-      google_calendar_id,
-      google_refresh_token,
-    } = body;
+    const { availability_settings } = body;
 
-    // Build update object
-    const updates: Record<string, any> = {
-      updated_at: new Date().toISOString(),
-    };
-
-    // Handle provider change
-    if (calendar_provider !== undefined) {
-      updates.calendar_provider = calendar_provider;
-    }
-
-    // Handle Calendly settings
-    if (calendly_api_key !== undefined) {
-      // Only update if it's a new value (not the masked one)
-      if (!calendly_api_key.includes('*')) {
-        updates.calendly_api_key = calendly_api_key || null;
+    if (availability_settings) {
+      const { error } = await supabaseAdmin
+        .from('availability_settings')
+        .upsert({ ...availability_settings, tenant_id: sessionUser.tenantId }, { onConflict: 'tenant_id' });
+      if (error) {
+        console.error('[Calendar Settings] Upsert error:', error);
+        return NextResponse.json({ error: 'Failed to update availability' }, { status: 500 });
       }
     }
-    if (calendly_event_url !== undefined) {
-      updates.calendly_event_url = calendly_event_url || null;
-    }
-
-    // Handle Google Calendar settings
-    if (google_calendar_id !== undefined) {
-      updates.google_calendar_id = google_calendar_id;
-    }
-    if (google_refresh_token !== undefined) {
-      updates.google_refresh_token = google_refresh_token;
-    }
-
-    // Update tenant
-    const { error } = await supabaseAdmin
-      .from('tenants')
-      .update(updates)
-      .eq('id', sessionUser.tenantId);
-
-    if (error) {
-      console.error('[Calendar Settings] Update error:', error);
-      return NextResponse.json(
-        { error: 'Failed to update settings' },
-        { status: 500 }
-      );
-    }
-
-    console.log(`[Calendar Settings] Updated for tenant ${sessionUser.tenantId}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[Calendar Settings] POST error:', error);
-    return NextResponse.json(
-      { error: 'Failed to update settings' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
   }
 }

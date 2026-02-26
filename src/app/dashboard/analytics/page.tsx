@@ -61,15 +61,12 @@ export default function AnalyticsPage() {
   const [responseCoverage, setResponseCoverage] = useState(0);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-    } else if (status === 'authenticated' && session?.user?.tenantId) {
+    if (_authReady) {
       fetchAnalytics();
     }
-  }, [status, session, period]);
+  }, [_authReady, period]);
 
   const fetchAnalytics = async () => {
-    if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);

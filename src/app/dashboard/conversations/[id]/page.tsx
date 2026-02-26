@@ -386,7 +386,7 @@ export default function ConversationViewer() {
         const res = await fetch(`/api/conversations/${conversationId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assigned_agent_id: session?.user?.id, status: 'human-handling' }),
+          body: JSON.stringify({ assigned_agent_id: null, status: 'human-handling' }),
         });
         if (!res.ok) throw new Error('Failed to take over');
         setIsHumanMode(true);

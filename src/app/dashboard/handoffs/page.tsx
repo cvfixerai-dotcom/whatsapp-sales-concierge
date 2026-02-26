@@ -93,24 +93,19 @@ export default function HandoffsPage() {
   const [showResolveModal, setShowResolveModal] = useState(false);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-    } else if (status === 'authenticated' && session?.user?.tenantId) {
-      fetchHandoffs();
-      setupRealtimeSubscription();
-    }
-
+    if (!_authReady) return;
+    fetchHandoffs();
+    setupRealtimeSubscription();
     return () => {
       supabase.channel('handoffs-updates').unsubscribe();
     };
-  }, [status, session]);
+  }, [_authReady]);
 
   useEffect(() => {
     setHandoffs(applyFilters(handoffQueue));
   }, [handoffQueue, statusFilter, severityFilter, searchQuery]);
 
   const fetchHandoffs = async () => {
-    if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);
@@ -189,7 +184,7 @@ export default function HandoffsPage() {
         },
         body: JSON.stringify({
           conversationId: handoffId,
-          agentId: session?.user?.id,
+          agentId: undefined,
         }),
       });
 

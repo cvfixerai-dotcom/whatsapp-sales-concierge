@@ -36,20 +36,15 @@ export default function ConversationsPage() {
   const pollRef = useRef(null);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-      return;
-    }
-    if (status === 'authenticated' && session?.user?.tenantId) {
-      // Silently repair is_active on existing conversations (one-time fix for legacy records)
-      fetch('/api/conversations/repair', { method: 'POST' }).catch(() => {});
-      fetchConversations();
+    if (!_authReady) return;
 
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(() => {
-        fetchConversations({ silent: true });
-      }, 5000);
-    }
+    fetch('/api/conversations/repair', { method: 'POST' }).catch(() => {});
+    fetchConversations();
+
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => {
+      fetchConversations({ silent: true });
+    }, 5000);
 
     return () => {
       if (pollRef.current) {
@@ -57,10 +52,9 @@ export default function ConversationsPage() {
         pollRef.current = null;
       }
     };
-  }, [status, session?.user?.tenantId]);
+  }, [_authReady]);
 
   const fetchConversations = async ({ silent = false } = {}) => {
-    if (!session?.user?.tenantId) return;
     try {
       if (!silent) setLoading(true);
       const res = await fetch('/api/conversations', { cache: 'no-store' });

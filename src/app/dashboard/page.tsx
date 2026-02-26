@@ -79,21 +79,18 @@ export default function Dashboard() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-    } else if (status === 'authenticated' && session?.user?.tenantId) {
+    if (_authReady) {
       checkOnboardingStatus();
       fetchDashboardData();
       setupRealtimeSubscription();
     }
-  }, [status, session]);
+  }, [_authReady]);
 
   const checkOnboardingStatus = async () => {
     // Onboarding check is handled by the API route
   };
 
   const fetchDashboardData = async () => {
-    if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);

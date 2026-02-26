@@ -57,10 +57,10 @@ export default function BillingPage() {
   const [processing, setProcessing] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.tenantId) {
+    if (_authReady) {
       fetchUsageData();
     }
-  }, [status, session]);
+  }, [_authReady]);
 
   async function fetchUsageData() {
     try {

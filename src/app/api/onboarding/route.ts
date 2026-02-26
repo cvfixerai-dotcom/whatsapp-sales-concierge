@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const { data: tenant, error } = await supabaseAdmin
       .from('tenants')
       .select(`
-        onboarding_completed,
+        setup_completed,
         onboarding_step,
         onboarding_data,
         company_name,
@@ -68,8 +68,8 @@ export async function GET(request: NextRequest) {
       },
       {
         id: 'calendar_setup',
-        name: 'Calendar Integration',
-        completed: !!(tenant.calendar_provider),
+        name: 'Calendar',
+        completed: true,
       },
       {
         id: 'handoff_setup',
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     const progress = Math.round((completedSteps / steps.length) * 100);
 
     return NextResponse.json({
-      onboarding_completed: tenant.onboarding_completed,
+      setup_completed: tenant.setup_completed,
       current_step: tenant.onboarding_step,
       progress,
       steps,
@@ -100,7 +100,6 @@ export async function GET(request: NextRequest) {
         ai_fallback_message: tenant.ai_fallback_message,
         qualification_questions: tenant.qualification_questions,
         twilio_configured: !!(tenant.twilio_account_sid && tenant.twilio_whatsapp_number),
-        calendar_provider: tenant.calendar_provider,
         handoff_settings: tenant.handoff_settings,
       },
     });
@@ -126,6 +125,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (action === 'complete_onboarding') {
+      updates.setup_completed = true;
       updates.onboarding_completed = true;
       updates.setup_completed_at = new Date().toISOString();
     } else if (action === 'update_step') {
@@ -168,10 +168,7 @@ export async function POST(request: NextRequest) {
           if (data.ai_assistant_name) updates.ai_assistant_name = data.ai_assistant_name;
           break;
 
-        case 3: // Calendar Setup
-          if (data.calendar_provider !== undefined) updates.calendar_provider = data.calendar_provider;
-          if (data.calendly_api_key) updates.calendly_api_key = data.calendly_api_key;
-          if (data.calendly_event_url) updates.calendly_event_url = data.calendly_event_url;
+        case 3: // Calendar Setup — internal calendar only, no external providers
           break;
 
         case 4: // Handoff Setup

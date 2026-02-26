@@ -106,7 +106,6 @@ async function handleSetupFeePayment(tenantId: string, data: any) {
       .from('tenants')
       .update({
         setup_fee_paid: true,
-        onboarding_status: 'payment_completed',
         setup_fee_paid_at: new Date(data.paid_at)
       })
       .eq('id', tenantId);

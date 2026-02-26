@@ -79,14 +79,10 @@ export default function CalendarPage() {
   });
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-      return;
-    }
-    if (status === 'authenticated' && session?.user?.tenantId) {
+    if (_authReady) {
       fetchCalendarData();
     }
-  }, [status, session?.user?.tenantId, currentDate]);
+  }, [_authReady, currentDate]);
 
   useEffect(() => {
     if (
@@ -98,7 +94,6 @@ export default function CalendarPage() {
   }, [currentDate]);
 
   const fetchCalendarData = async () => {
-    if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);

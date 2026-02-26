@@ -81,7 +81,7 @@ export default function OutreachPage() {
   const pageSize = 25;
   const debounceTimers = useRef<{ [key: string]: NodeJS.Timeout }>({});
 
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = false;
 
   const fetchLeads = useCallback(async () => {
     try {

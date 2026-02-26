@@ -124,15 +124,12 @@ export default function LeadsPage() {
   const [addingLead, setAddingLead] = useState(false);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-    } else if (status === 'authenticated' && session?.user?.tenantId) {
+    if (_authReady) {
       fetchLeads();
     }
-  }, [status, session, temperatureFilter, timelineFilter, dateRange, searchQuery]);
+  }, [_authReady, temperatureFilter, timelineFilter, dateRange, searchQuery]);
 
   const fetchLeads = async () => {
-    if (!session?.user?.tenantId) return;
 
     try {
       setLoading(true);

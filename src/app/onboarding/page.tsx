@@ -5,12 +5,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Building2, MessageSquare, Bot, Calendar, Bell, CheckCircle,
-  ChevronRight, ChevronLeft, Loader2, ExternalLink, Copy, Check, Sparkles,
+  ChevronRight, ChevronLeft, Loader2, Copy, Check, Sparkles,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-browser';
 
 interface OnboardingData {
-  onboarding_completed: boolean;
+  setup_completed: boolean;
   current_step: number;
   progress: number;
   steps: { id: string; name: string; completed: boolean }[];
@@ -45,9 +45,6 @@ export default function OnboardingPage() {
   const [aiConfig, setAiConfig] = useState({
     ai_personality: 'professional', ai_language: 'en',
     ai_greeting: '', ai_fallback_message: '', qualification_questions: [] as string[],
-  });
-  const [calendarSetup, setCalendarSetup] = useState({
-    calendar_provider: '', calendly_api_key: '', calendly_event_url: '',
   });
   const [handoffSetup, setHandoffSetup] = useState({
     channels: { dashboard: true, email: true, whatsapp: false, telegram: false },
@@ -96,9 +93,6 @@ export default function OnboardingPage() {
           ai_fallback_message: data.tenant.ai_fallback_message || '',
           qualification_questions: data.tenant.qualification_questions || [],
         });
-        if (data.tenant.calendar_provider) {
-          setCalendarSetup({ calendar_provider: data.tenant.calendar_provider, calendly_api_key: '', calendly_event_url: '' });
-        }
         if (data.tenant.handoff_settings) {
           setHandoffSetup({
             channels: data.tenant.handoff_settings.channels || { dashboard: true, email: true, whatsapp: false, telegram: false },
@@ -107,9 +101,9 @@ export default function OnboardingPage() {
         }
       }
 
-      // Only redirect to dashboard if onboarding is explicitly completed
-      if (data.onboarding_completed) {
-        router.push('/dashboard');
+      // Only redirect to dashboard if setup is completed
+      if (data.setup_completed) {
+        router.replace('/dashboard');
       }
     } catch (error) {
       console.error('Error fetching onboarding:', error);
@@ -142,7 +136,7 @@ export default function OnboardingPage() {
       case 0: stepData = businessProfile; break;
       case 1: stepData = twilioSetup; break;
       case 2: stepData = aiConfig; break;
-      case 3: stepData = calendarSetup; break;
+      case 3: stepData = {}; break;
       case 4: stepData = { handoff_settings: handoffSetup }; break;
     }
 
