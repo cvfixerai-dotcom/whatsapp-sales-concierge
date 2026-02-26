@@ -2,74 +2,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '@/lib/db/client';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAuth = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Parse body
     let body: any;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
-        { success: false, error: 'Invalid JSON in request body' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
     }
 
     const { companyName, fullName, email, password } = body;
 
-    // 2. Validate required fields
-    if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'Company name is required' },
-        { status: 400 }
-      );
-    }
-    if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'Full name is required' },
-        { status: 400 }
-      );
-    }
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'Email is required' },
-        { status: 400 }
-      );
-    }
-    if (!password || typeof password !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Password is required' },
-        { status: 400 }
-      );
-    }
-    if (password.length < 8) {
-      return NextResponse.json(
-        { success: false, error: 'Password must be at least 8 characters' },
-        { status: 400 }
-      );
-    }
+    if (!companyName?.trim()) return NextResponse.json({ success: false, error: 'Company name is required' }, { status: 400 });
+    if (!fullName?.trim()) return NextResponse.json({ success: false, error: 'Full name is required' }, { status: 400 });
+    if (!email?.trim()) return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 });
+    if (!password || password.length < 8) return NextResponse.json({ success: false, error: 'Password must be at least 8 characters' }, { status: 400 });
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // 3. Check if email already exists
-    const { data: existingUser } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
+    // Step 1: Create Supabase Auth user
+    const { data: authData, error: authError } = await supabaseAuth.auth.signUp({
+      email: normalizedEmail,
+      password,
+    });
 
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'An account with this email already exists' },
-        { status: 409 }
-      );
+    if (authError || !authData.user) {
+      console.error('[Signup] Auth error:', authError);
+      const msg = authError?.message || 'Failed to create auth account';
+      const status = msg.toLowerCase().includes('already') ? 409 : 500;
+      return NextResponse.json({ success: false, error: msg }, { status });
     }
 
-    // 4. Hash password
+    const authUserId = authData.user.id;
+
+    // Step 2: Hash password for NextAuth credentials provider
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // 5. Create tenant
+    // Step 3: Create tenant linked to Supabase Auth user
     const trialStart = new Date();
     const trialEnd = new Date(trialStart);
     trialEnd.setDate(trialEnd.getDate() + 7);
@@ -78,6 +54,7 @@ export async function POST(request: NextRequest) {
       .from('tenants')
       .insert({
         company_name: companyName.trim(),
+        owner_id: authUserId,
         subscription_tier: 'starter',
         subscription_status: 'trial',
         trial_start_date: trialStart.toISOString(),
@@ -93,23 +70,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (tenantError || !tenant) {
-      console.error('[Signup] Tenant creation error:', tenantError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: tenantError?.message || 'Failed to create account. Please try again.',
-          code: tenantError?.code,
-          details: tenantError?.details,
-          hint: tenantError?.hint,
-        },
-        { status: 500 }
-      );
+      console.error('[Signup] Tenant error:', tenantError);
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      return NextResponse.json({ success: false, error: tenantError?.message || 'Failed to create tenant' }, { status: 500 });
     }
 
-    // 6. Create user
+    // Step 4: Create custom users row — id matches Supabase Auth UID so NextAuth can find it
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .insert({
+        id: authUserId,
         tenant_id: tenant.id,
         email: normalizedEmail,
         password_hash: passwordHash,
@@ -121,30 +91,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (userError || !user) {
-      console.error('[Signup] User creation error:', userError);
-      // Roll back tenant to avoid orphaned records
+      console.error('[Signup] User row error:', userError);
       await supabaseAdmin.from('tenants').delete().eq('id', tenant.id);
-      return NextResponse.json(
-        { success: false, error: 'Failed to create user account. Please try again.' },
-        { status: 500 }
-      );
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      return NextResponse.json({ success: false, error: 'Failed to create user record' }, { status: 500 });
     }
 
-    console.log(`[Signup] New account created: tenant=${tenant.id} user=${user.id} email=${normalizedEmail}`);
+    console.log(`[Signup] Created: auth=${authUserId} tenant=${tenant.id} email=${normalizedEmail}`);
+    return NextResponse.json({ success: true, message: 'Account created successfully' }, { status: 201 });
 
-    return NextResponse.json(
-      { success: true, message: 'Account created successfully' },
-      { status: 201 }
-    );
   } catch (error) {
-    console.error("Signup error:", error);
-
+    console.error('[Signup] Unhandled error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      },
+      { success: false, error: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
