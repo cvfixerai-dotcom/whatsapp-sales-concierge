@@ -6,8 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-
-
+import { getSessionUser } from '@/lib/supabase-server';
 import { handoffService } from '@/lib/services/handoff';
 
 /**
