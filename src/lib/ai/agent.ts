@@ -375,7 +375,8 @@ export class AIAgent {
         const openaiModel = rawModel.replace(/^gpt-?4\.0(-turbo)?$/i, 'gpt-4o').replace(/^gpt4o$/i, 'gpt-4o') || 'gpt-4o';
         const { OpenAIProvider } = require('./providers/openai');
         const openaiProvider = new OpenAIProvider(openaiKey, openaiModel);
-        const response = await openaiProvider.call(callOptions);
+        const { getAvailableTools: _getTools } = require('./tools');
+        const response = await openaiProvider.call({ ...callOptions, tools: _getTools('openai') });
         console.log('[AI Agent] OpenAI response received');
         return response;
       } catch (openaiError) {
@@ -389,10 +390,11 @@ export class AIAgent {
     const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
     if (anthropicKey) {
       try {
-        const anthropicModel = (params.provider === 'anthropic' && params.model) ? params.model : 'claude-3-5-sonnet-20241022';
+        const anthropicModel = (params.provider === 'anthropic' && params.model) ? params.model : 'claude-3-haiku-20240307';
         const { AnthropicProvider } = require('./providers/anthropic');
+        const { getAvailableTools: _getAnthropicTools } = require('./tools');
         const anthropicProvider = new AnthropicProvider(anthropicKey, anthropicModel);
-        const response = await anthropicProvider.call(callOptions);
+        const response = await anthropicProvider.call({ ...callOptions, tools: _getAnthropicTools('anthropic') });
         console.log('[AI Agent] Anthropic fallback response received');
         return response;
       } catch (anthropicError) {

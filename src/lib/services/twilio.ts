@@ -373,11 +373,10 @@ export class TwilioService {
 
       console.log(`Found tenant: ${tenant.id}, status: ${tenant.subscription_status}`);
 
-      // Check subscription status
-      if (tenant.subscription_status !== 'active') {
-        console.warn(`Tenant ${tenant.id} has inactive subscription: ${tenant.subscription_status}`);
-        // Still allow for testing - remove this in production
-        return tenant.id;
+      // Allow active and trial tenants; block only cancelled
+      if (tenant.subscription_status === 'cancelled') {
+        console.warn(`Tenant ${tenant.id} subscription is cancelled - blocking message`);
+        return null;
       }
 
       return tenant.id;

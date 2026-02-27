@@ -154,7 +154,7 @@ export default function BillingPage() {
 
   const tier = usage.subscription_tier;
   const plan = PRICING.tiers[tier as keyof typeof PRICING.tiers];
-  const limit = usage.monthly_conversation_limit;
+  const limit = (tier === 'trial') ? plan.conversations : usage.monthly_conversation_limit;
   const overageInfo = calculateOverageCost(usage.conversation_count, limit);
   const percentUsed = (usage.conversation_count / limit) * 100;
   const projectedUsage = calculateMonthlyProjected(
@@ -210,7 +210,7 @@ export default function BillingPage() {
                   <p className="text-sm text-gray-500 mb-2">Next tier</p>
                   <p className="font-semibold">{upgradePath.nextTier}</p>
                   <p className="text-sm text-gray-600">
-                    +{upgradePath.additionalConversations.toLocaleString()} conversations
+                    {(PRICING.tiers[upgradePath.nextTier as keyof typeof PRICING.tiers]?.conversations ?? upgradePath.additionalConversations).toLocaleString()} conversations
                   </p>
                   <p className="text-lg font-bold text-blue-600">
                     +${upgradePath.priceDifference}/mo
