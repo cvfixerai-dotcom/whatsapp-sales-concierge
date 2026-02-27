@@ -375,8 +375,8 @@ export class AIAgent {
         const openaiModel = rawModel.replace(/^gpt-?4\.0(-turbo)?$/i, 'gpt-4o').replace(/^gpt4o$/i, 'gpt-4o') || 'gpt-4o';
         const { OpenAIProvider } = require('./providers/openai');
         const openaiProvider = new OpenAIProvider(openaiKey, openaiModel);
-        const { getAvailableTools: _getTools } = require('./tools');
-        const response = await openaiProvider.call({ ...callOptions, tools: _getTools('openai') });
+        const toolsToUse = (params.tools && params.tools.length > 0) ? params.tools : undefined;
+        const response = await openaiProvider.call({ ...callOptions, ...(toolsToUse ? { tools: toolsToUse } : {}) });
         console.log('[AI Agent] OpenAI response received');
         return response;
       } catch (openaiError) {
@@ -392,9 +392,9 @@ export class AIAgent {
       try {
         const anthropicModel = (params.provider === 'anthropic' && params.model) ? params.model : 'claude-3-haiku-20240307';
         const { AnthropicProvider } = require('./providers/anthropic');
-        const { getAvailableTools: _getAnthropicTools } = require('./tools');
         const anthropicProvider = new AnthropicProvider(anthropicKey, anthropicModel);
-        const response = await anthropicProvider.call({ ...callOptions, tools: _getAnthropicTools('anthropic') });
+        const anthToolsToUse = (params.tools && params.tools.length > 0) ? params.tools : undefined;
+        const response = await anthropicProvider.call({ ...callOptions, ...(anthToolsToUse ? { tools: anthToolsToUse } : {}) });
         console.log('[AI Agent] Anthropic fallback response received');
         return response;
       } catch (anthropicError) {

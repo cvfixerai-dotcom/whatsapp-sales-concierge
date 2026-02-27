@@ -35,6 +35,7 @@ export class OpenAIProvider extends BaseAIProvider {
 
       const data = await response.json();
       const choice = data.choices[0];
+      console.log("OPENAI RAW RESPONSE:", JSON.stringify(choice, null, 2));
 
       // Extract message content
       const message = choice.message;
