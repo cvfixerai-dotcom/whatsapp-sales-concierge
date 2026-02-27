@@ -30,7 +30,31 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/onboarding');
+      // Check onboarding status to route appropriately
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (userData?.tenant_id) {
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('setup_completed')
+            .eq('id', userData.tenant_id)
+            .single();
+          
+          if (tenant?.setup_completed) {
+            router.push('/dashboard');
+          } else {
+            router.push('/onboarding');
+          }
+        } else {
+          router.push('/onboarding');
+        }
+      }
       router.refresh();
     } catch {
       setError('An error occurred. Please try again.');
