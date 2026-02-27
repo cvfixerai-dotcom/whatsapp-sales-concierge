@@ -426,7 +426,7 @@ export interface Database {
           setup_fee_paid: boolean
           stripe_customer_id: string | null
           subscription_status: 'trial' | 'active' | 'cancelled' | 'past_due'
-          subscription_tier: 'starter' | 'growth' | 'scale' | 'enterprise'
+          subscription_tier: 'trial' | 'starter' | 'growth' | 'scale' | 'enterprise'
           twilio_account_sid: string | null
           twilio_auth_token: string | null
           twilio_whatsapp_number: string | null
@@ -450,7 +450,7 @@ export interface Database {
           setup_fee_paid?: boolean
           stripe_customer_id?: string | null
           subscription_status?: 'trial' | 'active' | 'cancelled' | 'past_due'
-          subscription_tier: 'starter' | 'growth' | 'scale' | 'enterprise'
+          subscription_tier: 'trial' | 'starter' | 'growth' | 'scale' | 'enterprise'
           twilio_account_sid?: string | null
           twilio_auth_token?: string | null
           twilio_whatsapp_number?: string | null
@@ -474,7 +474,7 @@ export interface Database {
           setup_fee_paid?: boolean
           stripe_customer_id?: string | null
           subscription_status?: 'trial' | 'active' | 'cancelled' | 'past_due'
-          subscription_tier?: 'starter' | 'growth' | 'scale' | 'enterprise'
+          subscription_tier?: 'trial' | 'starter' | 'growth' | 'scale' | 'enterprise'
           twilio_account_sid?: string | null
           twilio_auth_token?: string | null
           twilio_whatsapp_number?: string | null

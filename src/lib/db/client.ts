@@ -77,7 +77,7 @@ export type Json =
 export interface Tenant {
   id: string;
   company_name: string;
-  subscription_tier: 'free' | 'starter' | 'growth' | 'scale' | 'enterprise';
+  subscription_tier: 'trial' | 'free' | 'starter' | 'growth' | 'scale' | 'enterprise';
   subscription_status: 'trial' | 'active' | 'cancelled' | 'past_due';
   stripe_customer_id: string | null;
   twilio_account_sid: string | null;

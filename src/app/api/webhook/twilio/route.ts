@@ -324,8 +324,7 @@ function resolveConversationLimit(t: { subscription_status: string; subscription
   if (t.subscription_status === 'trial') {
     return t.trial_conversation_limit || 25;
   }
-  const tierLimits: Record<string, number> = { starter: 200, growth: 800, scale: 2500, enterprise: Infinity };
-  return t.monthly_conversation_limit || tierLimits[t.subscription_tier] || 200;
+  return t.monthly_conversation_limit ?? 0;
 }
 
 async function checkTenantLimits(tenantId: string, fromNumber: string, log: (msg: string) => void): Promise<boolean> {

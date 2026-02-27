@@ -158,7 +158,7 @@ export function getAvailableTools(provider: string = 'anthropic'): any[] {
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters,
-        strict: true,  // Enable strict schema validation
+        strict: false,
       },
     }));
   }

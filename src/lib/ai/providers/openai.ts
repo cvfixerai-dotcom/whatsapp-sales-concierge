@@ -60,17 +60,10 @@ export class OpenAIProvider extends BaseAIProvider {
     } catch (error) {
       console.error('OpenAI API error:', error);
       
-      // Return a fallback response
-      return {
-        message: params.language === 'ar' 
-          ? 'عذراً، أواجه بعض الصعوبة. سيعود إليك فريقنا قريباً.'
-          : "I'm sorry, I'm having some trouble. Our team will get back to you shortly.",
-        confidence: 0.1,
-        intent: 'error',
-        sentiment: 'neutral',
-      };
+      throw error;
     }
   }
+
 
   private extractQualificationData(response: string, userMessage: string) {
     // Simple qualification data extraction

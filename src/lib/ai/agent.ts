@@ -371,7 +371,8 @@ export class AIAgent {
     const openaiKey = process.env.OPENAI_API_KEY || '';
     if (openaiKey) {
       try {
-        const openaiModel = (params.provider === 'openai' && params.model) ? params.model : 'gpt-4o';
+        const rawModel = (params.provider === 'openai' && params.model) ? params.model : 'gpt-4o';
+        const openaiModel = rawModel.replace(/^gpt-?4\.0(-turbo)?$/i, 'gpt-4o').replace(/^gpt4o$/i, 'gpt-4o') || 'gpt-4o';
         const { OpenAIProvider } = require('./providers/openai');
         const openaiProvider = new OpenAIProvider(openaiKey, openaiModel);
         const response = await openaiProvider.call(callOptions);
