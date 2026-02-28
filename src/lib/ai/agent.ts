@@ -392,10 +392,12 @@ export class AIAgent {
     const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
     if (anthropicKey) {
       try {
-        const validAnthropicModels = ['claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'];
+        const validAnthropicModels = ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'];
         let anthropicModel = 'claude-3-haiku-20240307';
         if (params.provider === 'anthropic' && params.model && validAnthropicModels.includes(params.model)) {
           anthropicModel = params.model;
+        } else if (params.model) {
+          console.warn(`[AI Agent] Invalid Anthropic model '${params.model}', using ${anthropicModel}`);
         }
         const { AnthropicProvider } = require('./providers/anthropic');
         const anthropicProvider = new AnthropicProvider(anthropicKey, anthropicModel);
