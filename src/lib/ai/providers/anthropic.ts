@@ -11,7 +11,7 @@ export class AnthropicProvider extends BaseAIProvider {
         params.newMessage
       );
 
-      const toolEnforcementInstruction = params.tools.length > 0
+      const toolEnforcementInstruction = (params.tools && params.tools.length > 0)
         ? '\n\nCRITICAL RULES — FOLLOW WITHOUT EXCEPTION:\n' +
           '1. You MUST use tools. Do not confirm bookings without tool execution.\n' +
           '2. NEVER calculate, guess, or generate dates, times, or weekday names yourself.\n' +
@@ -34,12 +34,13 @@ export class AnthropicProvider extends BaseAIProvider {
           temperature: params.temperature || 0.7,
           messages: messages.slice(1), // Exclude system message
           system: params.systemPrompt + toolEnforcementInstruction,
-          tools: params.tools.length > 0 ? params.tools : undefined,
+          ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {}),
         }),
       });
 
       if (!response.ok) {
         const error = await response.text();
+        console.error(`[Anthropic] API call failed: ${response.status}`, error);
         throw new Error(`Anthropic API error: ${response.status} - ${error}`);
       }
 

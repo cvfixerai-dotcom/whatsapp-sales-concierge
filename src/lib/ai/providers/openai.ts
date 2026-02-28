@@ -12,6 +12,8 @@ export class OpenAIProvider extends BaseAIProvider {
         params.newMessage
       );
 
+      console.log(`[OpenAI] Calling ${this.model} with ${messages.length} messages, tools: ${params.tools?.length || 0}`);
+
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -23,13 +25,13 @@ export class OpenAIProvider extends BaseAIProvider {
           messages,
           temperature: params.temperature || 0.7,
           max_tokens: params.maxTokens || 1000,
-          tools: params.tools.length > 0 ? params.tools : undefined,
-          tool_choice: params.tools.length > 0 ? 'auto' : undefined,
+          ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: 'auto' } : {}),
         }),
       });
 
       if (!response.ok) {
         const error = await response.text();
+        console.error(`[OpenAI] API call failed: ${response.status}`, error);
         throw new Error(`OpenAI API error: ${response.status} - ${error}`);
       }
 
