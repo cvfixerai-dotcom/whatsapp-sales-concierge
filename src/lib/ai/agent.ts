@@ -112,7 +112,59 @@ export class AIAgent {
       //    (for book_appointment) or make a follow-up AI call for all other tools.
       if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
         console.log(`[AI Agent] Executing ${aiResponse.toolCalls.length} tool(s): ${aiResponse.toolCalls.map(t => t.name).join(', ')}`);
+        
+        // 🔥 FIX: Save the assistant's message with tool calls to the database
+        await this.saveMessage({
+          conversation_id: params.conversationId,
+          tenant_id: params.tenantId,
+          direction: 'outbound',
+          sender_type: 'ai',
+          content: aiResponse.message || '',
+          ai_confidence: aiResponse.confidence,
+          metadata: {
+            tool_calls: aiResponse.toolCalls.map(tc => ({
+              id: tc.id,
+              name: tc.name,
+              parameters: tc.parameters,
+            })),
+          },
+        });
+        
         await this.executeTools(aiResponse.toolCalls, context);
+        
+        // 🔥 FIX: Save tool results to the database
+        for (const toolCall of aiResponse.toolCalls) {
+          await this.saveMessage({
+            conversation_id: params.conversationId,
+            tenant_id: params.tenantId,
+            direction: 'outbound',
+            sender_type: 'system',
+            content: `Tool: ${toolCall.name} - ${toolCall.result?.success ? 'Success' : 'Failed'}`,
+            metadata: {
+              tool_call_id: toolCall.id,
+              tool_name: toolCall.name,
+              tool_result: toolCall.result,
+            },
+          });
+        }
+        
+        // 🔥 FIX: Reload contact data after tool execution to get fresh data
+        const { data: freshContact } = await supabaseAdmin
+          .from('contacts')
+          .select('*')
+          .eq('id', params.contactId)
+          .single();
+        
+        if (freshContact) {
+          context.contact = freshContact;
+          console.log('[AI Agent] 🔄 RELOADED CONTACT DATA:', {
+            name: freshContact.name,
+            email: freshContact.email,
+            budget_range: freshContact.budget_range,
+            service_interest: freshContact.service_interest,
+            timeline: freshContact.timeline,
+          });
+        }
 
         // Check if a booking succeeded — if so, generate confirmation in code, never via AI
         const bookingCall = aiResponse.toolCalls.find(
@@ -161,6 +213,15 @@ export class AIAgent {
 
           console.log(`[AI Agent] Updated history length: ${updatedHistory.length} (was ${conversationHistory.length})`);
           console.log(`[AI Agent] Tool results:`, aiResponse.toolCalls.map(tc => `${tc.name}: ${tc.result?.success ? 'success' : 'failed'}`).join(', '));
+          
+          // 🔥 FIX: Rebuild system prompt with FRESH contact data
+          const freshSystemPrompt = await this.buildSystemPrompt(
+            context.tenant,
+            context.contact, // Now has fresh data from reload above
+            params.language,
+            context.messages
+          );
+          console.log('[AI Agent] 🔄 REBUILT SYSTEM PROMPT with fresh contact data');
 
           // Build instruction for the follow-up call
           const toolResultsSummary = aiResponse.toolCalls.map(tc => {
@@ -183,7 +244,7 @@ export class AIAgent {
           }).join('\n');
 
           const enrichedPrompt =
-            systemPrompt +
+            freshSystemPrompt +
             `\n\nTOOL RESULTS (you just executed these tools — use the results in your next response):\n${toolResultsSummary}\n\nIMPORTANT: Respond to the customer based on the tool results above. Be natural and conversational. Keep it to 1-2 sentences. NEVER say "I'm processing" or "please wait". NEVER confirm a booking yourself — only the system can confirm bookings.`;
 
           // 🔥 CRITICAL FIX: Pass updated history WITHOUT re-adding the user message
@@ -197,7 +258,7 @@ export class AIAgent {
             tools: [],
             language: params.language,
             tenant: context.tenant,
-            contact: context.contact,
+            contact: context.contact, // Fresh contact data
           });
 
           console.log(`[AI Agent] Follow-up response: ${followUpResponse.message.substring(0, 100)}`);
@@ -240,17 +301,32 @@ export class AIAgent {
         aiResponse.message = this.generateFallbackResponse(params.messageContent, params.language);
       }
 
-      // 6. Save AI response
-      await this.saveMessage({
-        conversation_id: params.conversationId,
-        tenant_id: params.tenantId,
-        direction: 'outbound',
-        sender_type: 'ai',
-        content: aiResponse.message,
-        ai_confidence: aiResponse.confidence,
-        ai_intent: aiResponse.intent,
-        ai_sentiment: aiResponse.sentiment,
-      });
+      // 6. Save AI response (only if we didn't already save it during tool processing)
+      if (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0) {
+        await this.saveMessage({
+          conversation_id: params.conversationId,
+          tenant_id: params.tenantId,
+          direction: 'outbound',
+          sender_type: 'ai',
+          content: aiResponse.message,
+          ai_confidence: aiResponse.confidence,
+          ai_intent: aiResponse.intent,
+          ai_sentiment: aiResponse.sentiment,
+        });
+      } else {
+        // Update the last AI message with the final response
+        // (The tool call message was already saved, now save the follow-up response)
+        await this.saveMessage({
+          conversation_id: params.conversationId,
+          tenant_id: params.tenantId,
+          direction: 'outbound',
+          sender_type: 'ai',
+          content: aiResponse.message,
+          ai_confidence: aiResponse.confidence,
+          ai_intent: aiResponse.intent,
+          ai_sentiment: aiResponse.sentiment,
+        });
+      }
 
       // 7. Send WhatsApp reply
       await twilioService.sendWhatsAppMessage(
@@ -387,9 +463,26 @@ export class AIAgent {
     tenant: any;
     contact: any;
   }): Promise<AIResponse> {
-    // 🔥 DEBUG LOGGING: Track conversation history
-    console.log(`[AI Agent] callAI - History messages: ${params.messages.length}, New message: "${params.newMessage.substring(0, 50)}...", Tools: ${params.tools?.length || 0}`);
-    console.log(`[AI Agent] Last 3 history messages:`, params.messages.slice(-3).map(m => ({ role: m.role, content: m.content?.substring(0, 50) })));
+    // 🔥 DEBUG LOGGING: Track conversation history AND contact data
+    console.log('\n=== 🔍 BEFORE API CALL ===');
+    console.log('Contact data in system prompt:', {
+      name: params.contact.name || 'unknown',
+      email: params.contact.email || 'not collected yet',
+      budget_range: params.contact.budget_range || 'unknown',
+      service_interest: params.contact.service_interest || 'unknown',
+      timeline: params.contact.timeline || 'unknown',
+      temperature: params.contact.temperature || 'new',
+    });
+    console.log(`Messages in history: ${params.messages.length}`);
+    console.log(`New message: "${params.newMessage.substring(0, 50)}..."`);
+    console.log(`Tools available: ${params.tools?.length || 0}`);
+    console.log('Last 3 history messages:', params.messages.slice(-3).map(m => ({ 
+      role: m.role, 
+      content: m.content?.substring(0, 50),
+      hasToolCalls: !!m.tool_calls,
+      toolCallId: m.tool_call_id,
+    })));
+    console.log('=== END DEBUG ===\n');
 
     const callOptions = {
       systemPrompt: params.systemPrompt,
