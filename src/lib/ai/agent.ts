@@ -504,7 +504,15 @@ export class AIAgent {
         const openaiProvider = new OpenAIProvider(openaiKey, openaiModel);
         const { getAvailableTools: getOpenAITools } = require('./tools');
         const openaiTools = (params.tools && params.tools.length > 0) ? getOpenAITools('openai') : undefined;
-        console.log(`[AI Agent] OpenAI tools format check:`, openaiTools?.[0]?.type || 'no tools');
+        
+        // 🔍 DEBUG: Log tools being passed to OpenAI
+        if (openaiTools && openaiTools.length > 0) {
+          console.log(`[AI Agent] Generated ${openaiTools.length} tools for OpenAI:`, openaiTools.map(t => t.function.name).join(', '));
+          console.log(`[AI Agent] First tool format:`, openaiTools[0]);
+        } else {
+          console.log('[AI Agent] ⚠️ NO TOOLS generated for OpenAI (params.tools was empty)');
+        }
+        
         const response = await openaiProvider.call({ ...callOptions, ...(openaiTools ? { tools: openaiTools } : {}) });
         console.log('[AI Agent] OpenAI response received');
         return response;

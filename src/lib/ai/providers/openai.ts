@@ -13,6 +13,15 @@ export class OpenAIProvider extends BaseAIProvider {
       );
 
       console.log(`[OpenAI] Calling ${this.model} with ${messages.length} messages, tools: ${params.tools?.length || 0}`);
+      
+      // 🔍 DEBUG: Log which tools are being sent to OpenAI
+      if (params.tools && params.tools.length > 0) {
+        console.log('[OpenAI] Tools sent to OpenAI:', params.tools.map(t => t.function.name).join(', '));
+        console.log('[OpenAI] Tool choice: auto');
+      } else {
+        console.log('[OpenAI] ⚠️ NO TOOLS sent to OpenAI');
+      }
+      
       console.log(`[OpenAI] Message breakdown:`, messages.map(m => ({ role: m.role, hasContent: !!m.content, hasToolCalls: !!m.tool_calls, toolCallId: m.tool_call_id })));
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
