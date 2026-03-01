@@ -71,6 +71,8 @@ export async function getAvailableSlots(
   startDate?: Date,
   days: number = 7
 ): Promise<SlotResult[]> {
+  console.log('\n=== 🔍 GET AVAILABLE SLOTS - DETAILED TRACE ===');
+  
   const settings = await getAvailabilitySettings(tenantId);
   const timezone = settings.timezone || 'Asia/Dubai';
   const slotDuration = settings.slot_duration || 30;
@@ -79,11 +81,24 @@ export async function getAvailableSlots(
   const bookingWindowDays = settings.booking_window_days || 30;
   const maxPerDay = settings.max_per_day || 20;
 
+  console.log('[getAvailableSlots] Settings loaded:');
+  console.log('  Timezone:', timezone);
+  console.log('  Slot Duration:', slotDuration, 'minutes');
+  console.log('  Buffer Time:', bufferTime, 'minutes');
+  console.log('  Min Notice Hours:', minNoticeHours, '⚠️ CRITICAL - slots within this time are blocked');
+  console.log('  Booking Window:', bookingWindowDays, 'days');
+  console.log('  Max Per Day:', maxPerDay, 'appointments');
+
   const start = startDate || new Date();
   const cappedDays = Math.min(days, bookingWindowDays);
 
   const endDate = new Date(start);
   endDate.setDate(endDate.getDate() + cappedDays);
+  
+  console.log('[getAvailableSlots] Date range:');
+  console.log('  Start:', start.toISOString());
+  console.log('  End:', endDate.toISOString());
+  console.log('  Days to search:', cappedDays);
 
   // Fetch booked appointments
   const { data: booked } = await supabaseAdmin
@@ -115,7 +130,40 @@ export async function getAvailableSlots(
   const minNoticeTime = now.getTime() + minNoticeHours * 60 * 60 * 1000;
   const maxBookingTime = now.getTime() + bookingWindowDays * 24 * 60 * 60 * 1000;
 
+  console.log('[getAvailableSlots] Time filters:');
+  console.log('  Current time (UTC):', now.toISOString());
+  console.log('  Current time (Dubai):', new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    dateStyle: 'full',
+    timeStyle: 'long'
+  }).format(now));
+  console.log('  Min notice cutoff (UTC):', new Date(minNoticeTime).toISOString());
+  console.log('  Min notice cutoff (Dubai):', new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(new Date(minNoticeTime)));
+  console.log('  ⚠️ Any slot before', new Date(minNoticeTime).toISOString(), 'will be BLOCKED');
+  
+  console.log('[getAvailableSlots] Existing bookings:', booked?.length || 0);
+  if (booked && booked.length > 0) {
+    booked.forEach(apt => {
+      const aptTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        dateStyle: 'short',
+        timeStyle: 'short'
+      }).format(new Date(apt.scheduled_time));
+      console.log('    -', aptTime, '(', apt.duration_minutes, 'min )');
+    });
+  }
+  
+  console.log('[getAvailableSlots] Blocked ranges:', blocked?.length || 0);
+
   const slots: SlotResult[] = [];
+  let totalSlotsGenerated = 0;
+  let slotsBlockedByMinNotice = 0;
+  let slotsBlockedByBooked = 0;
+  let slotsBlockedByBlocked = 0;
 
   for (let dayOffset = 0; dayOffset < cappedDays; dayOffset++) {
     const date = new Date(start);
@@ -125,12 +173,20 @@ export async function getAvailableSlots(
 
     const dayName = DAY_NAMES[date.getDay()];
     const dayEnabled = settings[`${dayName}_enabled`];
-    if (!dayEnabled) continue;
+    
+    console.log(`\n[Day ${dayOffset + 1}] ${dayName.toUpperCase()} - ${date.toISOString().split('T')[0]}`);
+    
+    if (!dayEnabled) {
+      console.log('  ❌ Day is CLOSED (not enabled in settings)');
+      continue;
+    }
 
     const dayStartStr = settings[`${dayName}_start`] || '09:00';
     const dayEndStr = settings[`${dayName}_end`] || '17:00';
     const [startH, startM] = dayStartStr.split(':').map(Number);
     const [endH, endM] = dayEndStr.split(':').map(Number);
+    
+    console.log(`  ✅ Open: ${dayStartStr} - ${dayEndStr}`);
 
     // Count booked for this day
     const dayStartMs = new Date(date).setHours(0, 0, 0, 0);
@@ -140,26 +196,50 @@ export async function getAvailableSlots(
       return t >= dayStartMs && t <= dayEndMs;
     }).length;
 
-    if (dayBookedCount >= maxPerDay) continue;
+    if (dayBookedCount >= maxPerDay) {
+      console.log(`  ❌ Day is FULL (${dayBookedCount}/${maxPerDay} appointments booked)`);
+      continue;
+    }
+    console.log(`  📊 Current bookings: ${dayBookedCount}/${maxPerDay}`);
 
     // Generate time slots for this day
     let currentMinutes = startH * 60 + startM;
     const endMinutes = endH * 60 + endM;
     const step = slotDuration + bufferTime;
 
+    let daySlotsGenerated = 0;
+    let daySlotsBlockedMinNotice = 0;
+    let daySlotsBlockedBooked = 0;
+    let daySlotsBlockedBlocked = 0;
+    
     while (currentMinutes + slotDuration <= endMinutes) {
       const slotDate = new Date(date);
       slotDate.setHours(Math.floor(currentMinutes / 60), currentMinutes % 60, 0, 0);
       const slotTime = slotDate.getTime();
+      const slotTimeStr = slotDate.toLocaleTimeString('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      totalSlotsGenerated++;
 
       // Skip if before minimum notice
       if (slotTime < minNoticeTime) {
+        const hoursUntil = (slotTime - now.getTime()) / (1000 * 60 * 60);
+        console.log(`    ⏰ ${slotTimeStr} - BLOCKED (min notice: ${hoursUntil.toFixed(1)}h < ${minNoticeHours}h)`);
+        slotsBlockedByMinNotice++;
+        daySlotsBlockedMinNotice++;
         currentMinutes += step;
         continue;
       }
 
       // Skip if already booked
       if (bookedTimes.has(slotTime)) {
+        console.log(`    📅 ${slotTimeStr} - BLOCKED (already booked)`);
+        slotsBlockedByBooked++;
+        daySlotsBlockedBooked++;
         currentMinutes += step;
         continue;
       }
@@ -170,9 +250,15 @@ export async function getAvailableSlots(
         r => slotTime < r.end && slotEnd > r.start
       );
       if (isBlocked) {
+        console.log(`    🚫 ${slotTimeStr} - BLOCKED (in blocked range)`);
+        slotsBlockedByBlocked++;
+        daySlotsBlockedBlocked++;
         currentMinutes += step;
         continue;
       }
+      
+      console.log(`    ✅ ${slotTimeStr} - AVAILABLE`);
+      daySlotsGenerated++;
 
       slots.push({
         datetime: slotDate.toISOString(),
@@ -201,7 +287,17 @@ export async function getAvailableSlots(
 
       currentMinutes += step;
     }
+    
+    console.log(`  📊 Day summary: ${daySlotsGenerated} available, ${daySlotsBlockedMinNotice} blocked by min notice, ${daySlotsBlockedBooked} booked, ${daySlotsBlockedBlocked} blocked`);
   }
+  
+  console.log('\n[getAvailableSlots] FINAL SUMMARY:');
+  console.log('  Total slots checked:', totalSlotsGenerated);
+  console.log('  Slots blocked by min notice:', slotsBlockedByMinNotice, '⚠️ MOST COMMON REASON');
+  console.log('  Slots blocked by bookings:', slotsBlockedByBooked);
+  console.log('  Slots blocked by blocked ranges:', slotsBlockedByBlocked);
+  console.log('  Slots AVAILABLE:', slots.length);
+  console.log('=== END GET AVAILABLE SLOTS ===\n');
 
   return slots;
 }
