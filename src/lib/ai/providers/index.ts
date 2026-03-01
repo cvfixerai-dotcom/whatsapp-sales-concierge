@@ -30,11 +30,18 @@ export abstract class BaseAIProvider implements AIProvider {
     history: Array<{ role: string; content: string }>,
     newMessage: string
   ): Array<{ role: string; content: string }> {
-    return [
+    // 🔥 CRITICAL FIX: Don't add newMessage if it's empty (for follow-up calls after tool execution)
+    const messages = [
       { role: 'system', content: systemPrompt },
       ...history,
-      { role: 'user', content: newMessage },
     ];
+    
+    // Only add the new user message if it's not empty
+    if (newMessage && newMessage.trim().length > 0) {
+      messages.push({ role: 'user', content: newMessage });
+    }
+    
+    return messages;
   }
 
   protected parseToolCalls(toolCalls: any[]): ToolCall[] {

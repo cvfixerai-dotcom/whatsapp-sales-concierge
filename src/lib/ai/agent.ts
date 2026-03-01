@@ -132,7 +132,37 @@ export class AIAgent {
           aiResponse.message = formatBookingConfirmation(confirmedIso, tenantTimezone, language);
           // Skip AI follow-up entirely for successful bookings
         } else {
-          // For all other tools, build a summary and make a follow-up AI call
+          // 🔥 CRITICAL FIX: Build updated conversation history with tool calls and results
+          // This is the standard OpenAI function calling flow that was missing
+          const updatedHistory = [
+            ...conversationHistory,
+            // Add the user's message that triggered the tool calls
+            { role: 'user', content: params.messageContent },
+            // Add the assistant's response with tool calls
+            {
+              role: 'assistant',
+              content: aiResponse.message || '',
+              tool_calls: aiResponse.toolCalls.map((tc, idx) => ({
+                id: tc.id || `call_${idx}`,
+                type: 'function',
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.parameters),
+                },
+              })),
+            },
+            // Add tool results as tool messages
+            ...aiResponse.toolCalls.map((tc, idx) => ({
+              role: 'tool',
+              tool_call_id: tc.id || `call_${idx}`,
+              content: JSON.stringify(tc.result),
+            })),
+          ];
+
+          console.log(`[AI Agent] Updated history length: ${updatedHistory.length} (was ${conversationHistory.length})`);
+          console.log(`[AI Agent] Tool results:`, aiResponse.toolCalls.map(tc => `${tc.name}: ${tc.result?.success ? 'success' : 'failed'}`).join(', '));
+
+          // Build instruction for the follow-up call
           const toolResultsSummary = aiResponse.toolCalls.map(tc => {
             if (tc.name === 'check_calendar') {
               if (tc.result?.success && tc.result?.available_slots?.length > 0) {
@@ -152,18 +182,18 @@ export class AIAgent {
             return `${tc.name}: ${JSON.stringify(tc.result)}`;
           }).join('\n');
 
-          console.log(`[AI Agent] Tool results summary: ${toolResultsSummary}`);
-
           const enrichedPrompt =
             systemPrompt +
             `\n\nTOOL RESULTS (you just executed these tools — use the results in your next response):\n${toolResultsSummary}\n\nIMPORTANT: Respond to the customer based on the tool results above. Be natural and conversational. Keep it to 1-2 sentences. NEVER say "I'm processing" or "please wait". NEVER confirm a booking yourself — only the system can confirm bookings.`;
 
+          // 🔥 CRITICAL FIX: Pass updated history WITHOUT re-adding the user message
+          // The user message is already in updatedHistory, so we pass empty string
           const followUpResponse = await this.callAI({
             provider: context.tenant.ai_provider,
             model: context.tenant.ai_model,
             systemPrompt: enrichedPrompt,
-            messages: conversationHistory,
-            newMessage: params.messageContent,
+            messages: updatedHistory,
+            newMessage: '', // Empty because user message is already in history
             tools: [],
             language: params.language,
             tenant: context.tenant,
@@ -357,6 +387,10 @@ export class AIAgent {
     tenant: any;
     contact: any;
   }): Promise<AIResponse> {
+    // 🔥 DEBUG LOGGING: Track conversation history
+    console.log(`[AI Agent] callAI - History messages: ${params.messages.length}, New message: "${params.newMessage.substring(0, 50)}...", Tools: ${params.tools?.length || 0}`);
+    console.log(`[AI Agent] Last 3 history messages:`, params.messages.slice(-3).map(m => ({ role: m.role, content: m.content?.substring(0, 50) })));
+
     const callOptions = {
       systemPrompt: params.systemPrompt,
       messages: params.messages,

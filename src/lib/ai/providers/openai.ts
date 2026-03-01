@@ -13,6 +13,7 @@ export class OpenAIProvider extends BaseAIProvider {
       );
 
       console.log(`[OpenAI] Calling ${this.model} with ${messages.length} messages, tools: ${params.tools?.length || 0}`);
+      console.log(`[OpenAI] Message breakdown:`, messages.map(m => ({ role: m.role, hasContent: !!m.content, hasToolCalls: !!m.tool_calls, toolCallId: m.tool_call_id })));
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -44,22 +45,28 @@ export class OpenAIProvider extends BaseAIProvider {
       let messageText = message.content || '';
       let toolCalls: any[] = [];
 
-      // Extract tool calls if present
+      // Extract tool calls if present - PRESERVE THE ID!
       if (message.tool_calls) {
+        console.log(`[OpenAI] Received ${message.tool_calls.length} tool calls`);
         toolCalls = message.tool_calls.map((tc: any) => ({
+          id: tc.id, // 🔥 CRITICAL: Preserve the tool call ID for follow-up calls
           name: tc.function.name,
           parameters: JSON.parse(tc.function.arguments),
         }));
+        console.log(`[OpenAI] Tool calls:`, toolCalls.map(tc => `${tc.name} (id: ${tc.id})`).join(', '));
       }
 
-      return {
+      const result = {
         message: messageText,
         confidence: this.calculateConfidence(messageText, params),
-        intent: this.detectIntent(params.newMessage),
-        sentiment: this.detectSentiment(params.newMessage),
+        intent: this.detectIntent(params.newMessage || ''),
+        sentiment: this.detectSentiment(params.newMessage || ''),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        qualificationData: this.extractQualificationData(messageText, params.newMessage),
+        qualificationData: this.extractQualificationData(messageText, params.newMessage || ''),
       };
+
+      console.log(`[OpenAI] Response summary: message=${messageText.substring(0, 50)}, toolCalls=${toolCalls.length}, confidence=${result.confidence}`);
+      return result;
     } catch (error) {
       console.error('OpenAI API error:', error);
       
