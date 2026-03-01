@@ -69,24 +69,28 @@ export async function bookAppointment({
   error?: string;
 }> {
   try {
-    console.log(`[Tool: bookAppointment] Booking for contact ${contactId}, slotTime=${slotTime}`);
+    console.log('\n=== 📝 BOOK APPOINTMENT TOOL ===');
+    console.log(`[Tool: bookAppointment] Contact: ${contactId}`);
+    console.log(`[Tool: bookAppointment] Slot time input from AI: "${slotTime}"`);
 
     // 1. Hard reject non-ISO input — no natural language accepted
     assertIsoDateTime(slotTime);
+    console.log(`[Tool: bookAppointment] ✅ ISO format validated`);
 
     // 2. Resolve against last offered slots only — no global slot search fallback
     const resolvedIso = await resolveFromLastOfferedSlots(slotTime, contactId);
+    console.log(`[Tool: bookAppointment] Resolved ISO from last offered slots: ${resolvedIso || 'NOT FOUND'}`);
 
     if (!resolvedIso) {
-      console.warn('[Tool: bookAppointment] slotTime not found in last offered slots:', slotTime);
+      console.error('[Tool: bookAppointment] ❌ SLOT NOT FOUND IN LAST OFFERED SLOTS');
+      console.error('[Tool: bookAppointment] This means check_calendar was not called, or AI passed wrong datetime');
+      console.error('[Tool: bookAppointment] Slot time received:', slotTime);
       return {
         success: false,
         error:
           'The selected time was not in the recently offered slots. Please use check_calendar again and select one of the returned datetimes.',
       };
     }
-
-    console.log(`[Tool: bookAppointment] Resolved ISO from last offered slots: ${resolvedIso}`);
 
     // 3. Load tenant and contact
     const [{ data: tenant, error: tenantError }, { data: contact, error: contactError }] =
@@ -119,6 +123,13 @@ export async function bookAppointment({
     const companyName = tenant.company_name || 'Our Team';
 
     // 4. Book the slot
+    console.log('[Tool: bookAppointment] Booking slot with:', {
+      scheduledAt: resolvedIso,
+      customerName: inviteeName,
+      customerEmail: inviteeEmail,
+      duration: 30,
+    });
+    
     const bookingResult = await bookSlot({
       tenantId,
       scheduledAt: resolvedIso,
@@ -143,7 +154,11 @@ export async function bookAppointment({
       throw new Error('Booking insert returned no row — appointment ID is missing.');
     }
 
-    console.log(`[Tool: bookAppointment] Booked successfully. appointment_id=${appointmentId} tenant_id=${tenantId} iso=${resolvedIso}`);
+    console.log(`[Tool: bookAppointment] ✅ BOOKING SUCCESSFUL`);
+    console.log(`[Tool: bookAppointment] Appointment ID: ${appointmentId}`);
+    console.log(`[Tool: bookAppointment] Scheduled time (UTC): ${resolvedIso}`);
+    console.log(`[Tool: bookAppointment] Database record:`, bookingResult.appointment);
+    console.log('=== END BOOK APPOINTMENT ===\n');
 
     // 6. Update contact
     await updateLead({

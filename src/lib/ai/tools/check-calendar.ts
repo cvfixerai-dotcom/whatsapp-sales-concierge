@@ -118,10 +118,25 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
   error?: string;
 }> {
   try {
-    console.log(`[Tool: checkCalendar] Checking availability for tenant ${tenantId}, preferredDate=${preferredDate || 'none'}, daysAhead=${daysAhead || 'default'}`);
+    console.log('\n=== 📅 CHECK CALENDAR TOOL ===');
+    console.log(`[Tool: checkCalendar] Tenant: ${tenantId}`);
+    console.log(`[Tool: checkCalendar] Preferred date: ${preferredDate || 'none'}`);
+    console.log(`[Tool: checkCalendar] Preferred time: ${preferredTime || 'none'}`);
+    console.log(`[Tool: checkCalendar] Days ahead: ${daysAhead || 'default'}`);
 
     const settings = await getAvailabilitySettings(tenantId);
     const timezone = settings?.timezone || 'Asia/Dubai';
+    
+    console.log(`[Tool: checkCalendar] Timezone: ${timezone}`);
+    console.log(`[Tool: checkCalendar] Business hours:`, {
+      monday: settings.monday_enabled ? `${settings.monday_start}-${settings.monday_end}` : 'CLOSED',
+      tuesday: settings.tuesday_enabled ? `${settings.tuesday_start}-${settings.tuesday_end}` : 'CLOSED',
+      wednesday: settings.wednesday_enabled ? `${settings.wednesday_start}-${settings.wednesday_end}` : 'CLOSED',
+      thursday: settings.thursday_enabled ? `${settings.thursday_start}-${settings.thursday_end}` : 'CLOSED',
+      friday: settings.friday_enabled ? `${settings.friday_start}-${settings.friday_end}` : 'CLOSED',
+      saturday: settings.saturday_enabled ? `${settings.saturday_start}-${settings.saturday_end}` : 'CLOSED',
+      sunday: settings.sunday_enabled ? `${settings.sunday_start}-${settings.sunday_end}` : 'CLOSED',
+    });
     const parsedPreferred = preferredDate ? new Date(preferredDate) : null;
     const startDate = parsedPreferred && !Number.isNaN(parsedPreferred.getTime())
       ? parsedPreferred
@@ -165,7 +180,21 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
     const slotsToReturn = filteredSlots.length ? filteredSlots : slots;
     await storeLastSlots(contactId, slotsToReturn, timezone);
 
-    console.log(`[Tool: checkCalendar] In-app calendar returned ${slots.length} slots`);
+    console.log(`[Tool: checkCalendar] Total slots generated: ${slots.length}`);
+    console.log(`[Tool: checkCalendar] Filtered slots: ${filteredSlots.length}`);
+    console.log(`[Tool: checkCalendar] Returning ${slotsToReturn.length} slots to AI`);
+    
+    if (slotsToReturn.length > 0) {
+      console.log('[Tool: checkCalendar] First 3 slots:', slotsToReturn.slice(0, 3).map(s => ({
+        datetime: s.datetime,
+        formatted: s.formatted,
+        dayName: s.dayName,
+      })));
+    } else {
+      console.warn('[Tool: checkCalendar] ⚠️ NO SLOTS AVAILABLE - AI should ask to check with team');
+    }
+    
+    console.log('=== END CHECK CALENDAR ===\n');
 
     // IMPORTANT: The AI must display `formatted` to the user but pass `datetime` (ISO) to book_appointment.
     // Never ask the AI to construct or guess a datetime — only the ISO values from this list are valid for booking.

@@ -32,7 +32,7 @@ export const AI_TOOLS = {
 
   check_calendar: {
     name: 'check_calendar',
-    description: 'Check available appointment/meeting slots. Call this when the customer wants to schedule a meeting, viewing, demo, or consultation.',
+    description: 'MANDATORY: Check available appointment/meeting slots. You MUST call this tool BEFORE offering any appointment times to the customer. NEVER make up times like "1pm, 2pm, 3pm" - always get real availability from this tool first.',
     parameters: {
       type: 'object',
       properties: {
@@ -48,11 +48,11 @@ export const AI_TOOLS = {
 
   book_appointment: {
     name: 'book_appointment',
-    description: 'Book a confirmed appointment. Call this after the customer agrees to a specific time slot.',
+    description: 'Book a confirmed appointment. Call this after the customer agrees to a specific time slot. CRITICAL: You must pass the EXACT datetime (ISO string) from check_calendar results - never construct or guess a datetime.',
     parameters: {
       type: 'object',
       properties: {
-        slotTime: { type: 'string', description: 'The confirmed appointment time in ISO 8601 format', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}' },
+        slotTime: { type: 'string', description: 'The EXACT datetime ISO string from check_calendar results (e.g., "2026-03-02T14:00:00+04:00"). When customer says "2pm", find the slot from check_calendar with that time and use its datetime value.', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}' },
       },
       required: ['slotTime'],
       additionalProperties: false,
