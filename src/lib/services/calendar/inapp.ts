@@ -213,8 +213,43 @@ export async function getAvailableSlots(
     let daySlotsBlockedBlocked = 0;
     
     while (currentMinutes + slotDuration <= endMinutes) {
-      const slotDate = new Date(date);
-      slotDate.setHours(Math.floor(currentMinutes / 60), currentMinutes % 60, 0, 0);
+      // Create slot time in tenant's timezone (not UTC)
+      // Business hours (09:00-17:00) are in local time (e.g., Dubai time), not UTC
+      const hours = Math.floor(currentMinutes / 60);
+      const minutes = currentMinutes % 60;
+      
+      // Get date components
+      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+      
+      // Create an ISO string representing this time in the tenant's timezone
+      // For Dubai (Asia/Dubai = UTC+4), we need to build: 2026-03-02T09:00:00+04:00
+      // Then parse it to get the correct UTC time
+      
+      // Get the timezone offset for this date in the tenant's timezone
+      // We'll create a reference date and format it to extract the offset
+      const refDate = new Date(`${dateStr}T12:00:00Z`); // Noon UTC
+      const formatted = refDate.toLocaleString('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit', 
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZoneName: 'short'
+      });
+      
+      // Extract offset from formatted string (e.g., "GMT+4")
+      const offsetMatch = formatted.match(/GMT([+-]\d+)/);
+      const offsetHours = offsetMatch ? parseInt(offsetMatch[1]) : 0;
+      const offsetStr = offsetHours >= 0 
+        ? `+${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
+        : `-${String(Math.abs(offsetHours)).padStart(2, '0')}:00`;
+      
+      // Build ISO string with timezone offset
+      const isoWithTZ = `${dateStr}T${timeStr}${offsetStr}`;
+      const slotDate = new Date(isoWithTZ);
       const slotTime = slotDate.getTime();
       const slotTimeStr = slotDate.toLocaleTimeString('en-US', {
         timeZone: timezone,

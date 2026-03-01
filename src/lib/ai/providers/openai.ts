@@ -17,7 +17,7 @@ export class OpenAIProvider extends BaseAIProvider {
       // 🔍 DEBUG: Log which tools are being sent to OpenAI
       if (params.tools && params.tools.length > 0) {
         console.log('[OpenAI] Tools sent to OpenAI:', params.tools.map(t => t.function.name).join(', '));
-        console.log('[OpenAI] Tool choice: auto');
+        console.log('[OpenAI] Tool choice: required');
       } else {
         console.log('[OpenAI] ⚠️ NO TOOLS sent to OpenAI');
       }
