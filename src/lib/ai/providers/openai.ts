@@ -35,7 +35,7 @@ export class OpenAIProvider extends BaseAIProvider {
           messages,
           temperature: params.temperature || 0.7,
           max_tokens: params.maxTokens || 1000,
-          ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: 'auto' } : {}),
+          ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: 'required' } : {}),
         }),
       });
 
