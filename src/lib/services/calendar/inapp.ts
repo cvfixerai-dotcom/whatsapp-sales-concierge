@@ -65,6 +65,15 @@ export async function getAvailabilitySettings(tenantId: string): Promise<Availab
 
 /**
  * Get available appointment slots for a tenant
+ * 
+ * TIMEZONE PHILOSOPHY:
+ * - All slots are generated in BUSINESS TIMEZONE ONLY (e.g., Asia/Dubai)
+ * - Business hours (9am-6pm) are interpreted as business local time
+ * - NO user timezone detection or conversion
+ * - When AI says "1pm available", it means 1pm business time
+ * - Customer from any timezone books "1pm" → gets 1pm business time
+ * 
+ * Why? Customers booking locally don't do timezone math. They mean business hours.
  */
 export async function getAvailableSlots(
   tenantId: string,
@@ -74,7 +83,7 @@ export async function getAvailableSlots(
   console.log('\n=== 🔍 GET AVAILABLE SLOTS - DETAILED TRACE ===');
   
   const settings = await getAvailabilitySettings(tenantId);
-  const timezone = settings.timezone || 'Asia/Dubai';
+  const timezone = settings.timezone || 'Asia/Dubai'; // Business timezone (no user timezone)
   
   console.log('[CHECK_CALENDAR] Tenant timezone:', timezone);
   console.log('[CHECK_CALENDAR] Server timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);

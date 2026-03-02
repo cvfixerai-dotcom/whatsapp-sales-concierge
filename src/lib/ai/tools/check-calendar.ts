@@ -112,6 +112,16 @@ async function storeLastSlots(contactId: string | undefined, slots: any[], timez
   }
 }
 
+/**
+ * Check calendar for available appointment slots
+ * 
+ * TIMEZONE PHILOSOPHY:
+ * - Returns slots in BUSINESS TIMEZONE ONLY
+ * - When user says "2pm", we interpret as 2pm business time
+ * - NO user timezone detection or conversion
+ * - Slots are formatted for display in business timezone
+ * - ISO datetimes represent business time (stored as UTC)
+ */
 export async function checkCalendar({ tenantId, contactId, preferredDate, preferredTime, daysAhead }: CheckCalendarParams): Promise<{
   success: boolean;
   available_slots?: CalendarSlot[];
@@ -125,7 +135,7 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
     console.log(`[Tool: checkCalendar] Days ahead: ${daysAhead || 'default'}`);
 
     const settings = await getAvailabilitySettings(tenantId);
-    const timezone = settings?.timezone || 'Asia/Dubai';
+    const timezone = settings?.timezone || 'Asia/Dubai'; // Business timezone (no user timezone)
     
     console.log(`[Tool: checkCalendar] Timezone: ${timezone}`);
     console.log(`[Tool: checkCalendar] Business hours:`, {

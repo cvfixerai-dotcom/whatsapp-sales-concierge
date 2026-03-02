@@ -56,6 +56,18 @@ async function resolveFromLastOfferedSlots(
   return match ? match.datetime : null;
 }
 
+/**
+ * Book an appointment slot
+ * 
+ * TIMEZONE PHILOSOPHY:
+ * - Accepts ISO datetime from check_calendar (already in business timezone as UTC)
+ * - NO user timezone detection (no phone number → timezone mapping)
+ * - NO timezone conversion based on user location
+ * - Simply validates and books the slot as-is
+ * 
+ * When user says "2pm", we assume they mean 2pm business time.
+ * The ISO datetime from check_calendar already represents this.
+ */
 export async function bookAppointment({
   tenantId,
   contactId,
@@ -78,6 +90,7 @@ export async function bookAppointment({
     console.log(`[Tool: bookAppointment] ✅ ISO format validated`);
 
     // 2. Resolve against last offered slots only — no global slot search fallback
+    // No timezone conversion here - slot is already in business timezone (as UTC)
     const resolvedIso = await resolveFromLastOfferedSlots(slotTime, contactId);
     console.log(`[Tool: bookAppointment] Resolved ISO from last offered slots: ${resolvedIso || 'NOT FOUND'}`);
     

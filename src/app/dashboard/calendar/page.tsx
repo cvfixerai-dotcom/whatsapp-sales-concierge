@@ -135,11 +135,14 @@ export default function CalendarPage() {
   };
 
   const formatTime = (dateStr: string) => {
+    // TIMEZONE PHILOSOPHY: Always display business timezone
+    // Regardless of viewer's location, show business time (Dubai)
+    // No viewer timezone detection - keeps it simple and clear
     const date = new Date(dateStr);
     return date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit',
-      timeZone: 'Asia/Dubai' // Always show Dubai time regardless of viewer's location
+      timeZone: 'Asia/Dubai' // Business timezone only
     });
   };
 
