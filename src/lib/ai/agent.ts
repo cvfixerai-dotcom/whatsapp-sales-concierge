@@ -249,13 +249,14 @@ export class AIAgent {
 
           // 🔥 CRITICAL FIX: Pass updated history WITHOUT re-adding the user message
           // The user message is already in updatedHistory, so we pass empty string
+          // 🔥 CRITICAL FIX #2: Preserve tools array so AI can call tools again (e.g., check_calendar after booking fails)
           const followUpResponse = await this.callAI({
             provider: context.tenant.ai_provider,
             model: context.tenant.ai_model,
             systemPrompt: enrichedPrompt,
             messages: updatedHistory,
             newMessage: '', // Empty because user message is already in history
-            tools: [],
+            tools: this.getAvailableTools(context.tenant), // ✅ FIXED: Include tools so AI can retry
             language: params.language,
             tenant: context.tenant,
             contact: context.contact, // Fresh contact data
