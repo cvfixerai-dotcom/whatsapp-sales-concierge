@@ -263,7 +263,69 @@ export class AIAgent {
           });
 
           console.log(`[AI Agent] Follow-up response: ${followUpResponse.message.substring(0, 100)}`);
-          aiResponse.message = followUpResponse.message;
+          
+          // 🔥 HANDLE RECURSIVE TOOL CALLS
+          // If the follow-up response also contains tool calls (e.g., check_calendar after update_lead),
+          // execute those tools and make another follow-up call
+          if (followUpResponse.toolCalls && followUpResponse.toolCalls.length > 0) {
+            console.log(`[AI Agent] Follow-up response contains ${followUpResponse.toolCalls.length} more tool calls: ${followUpResponse.toolCalls.map(t => t.name).join(', ')}`);
+            
+            // Execute the additional tools
+            await this.executeTools(followUpResponse.toolCalls, context);
+            
+            // Build another updated history with the new tool results
+            const secondUpdatedHistory = [
+              ...updatedHistory,
+              {
+                role: 'assistant',
+                content: followUpResponse.message || '',
+                tool_calls: followUpResponse.toolCalls.map(tc => ({
+                  id: tc.id,
+                  type: 'function',
+                  function: {
+                    name: tc.name,
+                    arguments: JSON.stringify(tc.parameters),
+                  },
+                })),
+              },
+              ...followUpResponse.toolCalls.map((tc, idx) => ({
+                role: 'tool',
+                tool_call_id: tc.id || `call_${idx}`,
+                content: JSON.stringify(tc.result),
+              })),
+            ];
+            
+            // Build instruction for the second follow-up
+            const secondToolResultsSummary = followUpResponse.toolCalls.map(tc => {
+              if (tc.name === 'check_calendar') {
+                if (tc.result?.success && tc.result?.available_slots?.length > 0) {
+                  return `Calendar check: ${tc.result.available_slots.length} available slots — display these formatted times to the customer and ask which they prefer: ${tc.result.available_slots.slice(0, 5).map((s: any) => s.formatted).join(', ')}. When the customer picks one, call book_appointment with the exact datetime ISO string.`;
+                }
+                return `Calendar check: ${tc.result?.error || 'No available slots found'}`;
+              }
+              return `${tc.name}: ${JSON.stringify(tc.result)}`;
+            }).join('\n');
+            
+            const secondEnrichedPrompt = enrichedPrompt + `\n\nADDITIONAL TOOL RESULTS:\n${secondToolResultsSummary}`;
+            
+            // Make a second follow-up call
+            const secondFollowUpResponse = await this.callAI({
+              provider: context.tenant.ai_provider,
+              model: context.tenant.ai_model,
+              systemPrompt: secondEnrichedPrompt,
+              messages: secondUpdatedHistory,
+              newMessage: '',
+              tools: [], // No more tools - just want a text response now
+              language: params.language,
+              tenant: context.tenant,
+              contact: context.contact,
+            });
+            
+            console.log(`[AI Agent] Second follow-up response: ${secondFollowUpResponse.message.substring(0, 100)}`);
+            aiResponse.message = secondFollowUpResponse.message;
+          } else {
+            aiResponse.message = followUpResponse.message;
+          }
         }
       }
 
