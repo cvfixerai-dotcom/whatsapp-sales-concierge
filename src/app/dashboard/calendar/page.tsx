@@ -136,7 +136,11 @@ export default function CalendarPage() {
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      timeZone: 'Asia/Dubai' // Always show Dubai time regardless of viewer's location
+    });
   };
 
   const getDuration = (appointment: Appointment) =>
@@ -289,6 +293,9 @@ export default function CalendarPage() {
           <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
           <p className="text-sm text-gray-500">
             Track AI-booked meetings, manage availability, and block time for your team.
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            All times shown in Dubai/GST (UTC+4)
           </p>
         </div>
         <div className="flex items-center gap-3">

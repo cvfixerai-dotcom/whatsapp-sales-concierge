@@ -75,6 +75,9 @@ export async function getAvailableSlots(
   
   const settings = await getAvailabilitySettings(tenantId);
   const timezone = settings.timezone || 'Asia/Dubai';
+  
+  console.log('[CHECK_CALENDAR] Tenant timezone:', timezone);
+  console.log('[CHECK_CALENDAR] Server timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
   const slotDuration = settings.slot_duration || 30;
   const bufferTime = settings.buffer_time || 0;
   const minNoticeHours = settings.min_notice_hours || 2;
@@ -251,6 +254,17 @@ export async function getAvailableSlots(
       const isoWithTZ = `${dateStr}T${timeStr}${offsetStr}`;
       const slotDate = new Date(isoWithTZ);
       const slotTime = slotDate.getTime();
+      
+      // Log first slot generation for debugging
+      if (dayOffset === 0 && currentMinutes === startH * 60 + startM) {
+        console.log('[CHECK_CALENDAR] Sample slot BEFORE formatting:', {
+          dateStr,
+          timeStr,
+          offsetStr,
+          isoWithTZ,
+          slotTime: new Date(slotTime).toISOString()
+        });
+      }
       const slotTimeStr = slotDate.toLocaleTimeString('en-US', {
         timeZone: timezone,
         hour: 'numeric',
@@ -295,7 +309,7 @@ export async function getAvailableSlots(
       console.log(`    ✅ ${slotTimeStr} - AVAILABLE`);
       daySlotsGenerated++;
 
-      slots.push({
+      const slotObj = {
         datetime: slotDate.toISOString(),
         formatted: slotDate.toLocaleString('en-US', {
           weekday: 'long', month: 'short', day: 'numeric',
@@ -318,7 +332,14 @@ export async function getAvailableSlots(
           month: 'short', day: 'numeric', year: 'numeric',
           timeZone: timezone,
         }),
-      });
+      };
+      
+      // Log first slot after formatting
+      if (dayOffset === 0 && currentMinutes === startH * 60 + startM) {
+        console.log('[CHECK_CALENDAR] Sample slot AFTER formatting:', slotObj);
+      }
+      
+      slots.push(slotObj);
 
       currentMinutes += step;
     }
@@ -399,6 +420,17 @@ export async function bookSlot(params: {
     return { success: false, error: 'Slot is no longer available' };
   }
 
+  console.log('[BOOK_SLOT] Saving to database:', {
+    scheduledAt: params.scheduledAt,
+    type: typeof params.scheduledAt,
+    parsedAsDate: new Date(params.scheduledAt).toISOString(),
+    parsedAsDubai: new Date(params.scheduledAt).toLocaleString('en-US', {
+      timeZone: 'Asia/Dubai',
+      dateStyle: 'full',
+      timeStyle: 'long'
+    })
+  });
+  
   const { data: appointment, error } = await supabaseAdmin
     .from('appointments')
     .insert({

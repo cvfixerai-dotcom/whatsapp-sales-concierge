@@ -80,6 +80,11 @@ export async function bookAppointment({
     // 2. Resolve against last offered slots only — no global slot search fallback
     const resolvedIso = await resolveFromLastOfferedSlots(slotTime, contactId);
     console.log(`[Tool: bookAppointment] Resolved ISO from last offered slots: ${resolvedIso || 'NOT FOUND'}`);
+    
+    console.log('[BOOK_APPOINTMENT] User input:', slotTime);
+    console.log('[BOOK_APPOINTMENT] Parsed datetime:', new Date(slotTime).toISOString());
+    console.log('[BOOK_APPOINTMENT] Value being saved to DB:', resolvedIso);
+    console.log('[BOOK_APPOINTMENT] Type of value:', typeof resolvedIso);
 
     if (!resolvedIso) {
       console.error('[Tool: bookAppointment] ❌ SLOT NOT FOUND IN LAST OFFERED SLOTS');
