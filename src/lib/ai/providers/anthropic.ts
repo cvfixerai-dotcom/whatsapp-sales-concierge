@@ -3,6 +3,74 @@ import { BaseAIProvider, AIProviderParams } from './index';
 import { AIResponse } from '../agent';
 
 export class AnthropicProvider extends BaseAIProvider {
+  /**
+   * Override formatMessages to convert OpenAI-style messages to Claude format
+   * Claude doesn't support role: 'tool' - it needs tool results in a specific format
+   */
+  protected formatMessages(
+    systemPrompt: string,
+    history: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }>,
+    newMessage: string
+  ): Array<any> {
+    const messages: any[] = [];
+    
+    // Process history and convert to Claude format
+    for (const msg of history) {
+      // Convert tool results (role: 'tool') to Claude's format
+      if (msg.role === 'tool') {
+        messages.push({
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: msg.tool_call_id,
+            content: msg.content
+          }]
+        });
+      }
+      // Convert assistant messages with tool_calls to Claude's format
+      else if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+        const content: any[] = [];
+        
+        // Add text content if present
+        if (msg.content && msg.content.trim().length > 0) {
+          content.push({ type: 'text', text: msg.content });
+        }
+        
+        // Add tool_use blocks
+        for (const tc of msg.tool_calls) {
+          content.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function?.name || tc.name,
+            input: typeof tc.function?.arguments === 'string' 
+              ? JSON.parse(tc.function.arguments) 
+              : (tc.parameters || tc.input || {})
+          });
+        }
+        
+        messages.push({
+          role: 'assistant',
+          content: content
+        });
+      }
+      // Regular user/assistant messages
+      else if (msg.role === 'user' || msg.role === 'assistant') {
+        messages.push({
+          role: msg.role,
+          content: msg.content
+        });
+      }
+      // Skip system messages (handled separately in Claude)
+    }
+    
+    // Add new user message if present
+    if (newMessage && newMessage.trim().length > 0) {
+      messages.push({ role: 'user', content: newMessage });
+    }
+    
+    return messages;
+  }
+
   async call(params: AIProviderParams): Promise<AIResponse> {
     try {
       const messages = this.formatMessages(
@@ -20,6 +88,15 @@ export class AnthropicProvider extends BaseAIProvider {
           '5. NEVER write a booking confirmation message — the system sends it automatically after a successful booking.\n' +
           '6. If the customer names a time you did not offer, call check_calendar again rather than constructing a datetime.'
         : '';
+
+      // Debug: Log Claude-formatted messages
+      console.log(`[Anthropic] Calling ${this.model} with ${messages.length} messages, tools: ${params.tools?.length || 0}`);
+      console.log('[Anthropic] Message format check:', messages.map(m => ({
+        role: m.role,
+        contentType: Array.isArray(m.content) ? 'array' : 'string',
+        hasToolResult: Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool_result'),
+        hasToolUse: Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool_use')
+      })));
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
