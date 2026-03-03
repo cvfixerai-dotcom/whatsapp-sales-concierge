@@ -148,22 +148,31 @@ export class AIAgent {
           });
         }
         
-        // 🔥 FIX: Reload contact data after tool execution to get fresh data
-        const { data: freshContact } = await supabaseAdmin
-          .from('contacts')
-          .select('*')
-          .eq('id', params.contactId)
-          .single();
+        // 🔥 OPTIMIZED: Only reload contact data if update_lead was called
+        // Other tools (check_calendar, book_appointment) don't modify contact data
+        const needsReload = aiResponse.toolCalls.some(tc => tc.name === 'update_lead');
         
-        if (freshContact) {
-          context.contact = freshContact;
-          console.log('[AI Agent] 🔄 RELOADED CONTACT DATA:', {
-            name: freshContact.name,
-            email: freshContact.email,
-            budget_range: freshContact.budget_range,
-            service_interest: freshContact.service_interest,
-            timeline: freshContact.timeline,
-          });
+        if (needsReload) {
+          console.log('[AI Agent] 🔄 Reloading contact data after update_lead...');
+          const { data: freshContact } = await supabaseAdmin
+            .from('contacts')
+            .select('*')
+            .eq('id', params.contactId)
+            .single();
+          
+          if (freshContact) {
+            context.contact = freshContact;
+            console.log('[AI Agent] ✅ Contact data reloaded:', {
+              name: freshContact.name,
+              email: freshContact.email,
+              budget_range: freshContact.budget_range,
+              service_interest: freshContact.service_interest,
+              timeline: freshContact.timeline,
+              temperature: freshContact.temperature,
+            });
+          }
+        } else {
+          console.log('[AI Agent] ⏭️ Skipping contact reload (no update_lead call)');
         }
 
         // Check if a booking succeeded — if so, generate confirmation in code, never via AI

@@ -128,11 +128,15 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
   error?: string;
 }> {
   try {
+    // Log tool call with clean parameter summary
     console.log('\n=== 📅 CHECK CALENDAR TOOL ===');
-    console.log(`[Tool: checkCalendar] Tenant: ${tenantId}`);
-    console.log(`[Tool: checkCalendar] Preferred date: ${preferredDate || 'none'}`);
-    console.log(`[Tool: checkCalendar] Preferred time: ${preferredTime || 'none'}`);
-    console.log(`[Tool: checkCalendar] Days ahead: ${daysAhead || 'default'}`);
+    console.log('[Tool: check_calendar] ✅ CALLED with parameters:', {
+      tenantId: tenantId.substring(0, 8) + '...',
+      contactId: contactId ? contactId.substring(0, 8) + '...' : 'none',
+      preferredDate: preferredDate || 'none',
+      preferredTime: preferredTime || 'none',
+      daysAhead: daysAhead || 'default (7)'
+    });
 
     const settings = await getAvailabilitySettings(tenantId);
     const timezone = settings?.timezone || 'Asia/Dubai'; // Business timezone (no user timezone)

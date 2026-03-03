@@ -81,9 +81,14 @@ export async function bookAppointment({
   error?: string;
 }> {
   try {
+    // Log tool call with clean parameter summary
     console.log('\n=== 📝 BOOK APPOINTMENT TOOL ===');
-    console.log(`[Tool: bookAppointment] Contact: ${contactId}`);
-    console.log(`[Tool: bookAppointment] Slot time input from AI: "${slotTime}"`);
+    console.log('[Tool: book_appointment] ✅ CALLED with parameters:', {
+      tenantId: tenantId.substring(0, 8) + '...',
+      contactId: contactId.substring(0, 8) + '...',
+      conversationId: conversationId.substring(0, 8) + '...',
+      slotTime: slotTime
+    });
 
     // 1. Hard reject non-ISO input — no natural language accepted
     assertIsoDateTime(slotTime);
@@ -92,12 +97,11 @@ export async function bookAppointment({
     // 2. Resolve against last offered slots only — no global slot search fallback
     // No timezone conversion here - slot is already in business timezone (as UTC)
     const resolvedIso = await resolveFromLastOfferedSlots(slotTime, contactId);
-    console.log(`[Tool: bookAppointment] Resolved ISO from last offered slots: ${resolvedIso || 'NOT FOUND'}`);
-    
-    console.log('[BOOK_APPOINTMENT] User input:', slotTime);
-    console.log('[BOOK_APPOINTMENT] Parsed datetime:', new Date(slotTime).toISOString());
-    console.log('[BOOK_APPOINTMENT] Value being saved to DB:', resolvedIso);
-    console.log('[BOOK_APPOINTMENT] Type of value:', typeof resolvedIso);
+    console.log(`[Tool: book_appointment] Resolved from last offered slots:`, {
+      input: slotTime,
+      resolved: resolvedIso || 'NOT FOUND',
+      parsedUTC: new Date(slotTime).toISOString()
+    });
 
     if (!resolvedIso) {
       console.error('[Tool: bookAppointment] ❌ SLOT NOT FOUND IN LAST OFFERED SLOTS');
