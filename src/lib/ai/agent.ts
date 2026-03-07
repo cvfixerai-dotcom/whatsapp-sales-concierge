@@ -317,21 +317,43 @@ export class AIAgent {
             
             const secondEnrichedPrompt = enrichedPrompt + `\n\nADDITIONAL TOOL RESULTS:\n${secondToolResultsSummary}`;
             
-            // Make a second follow-up call
+            // Make a second follow-up call - keep tools available for booking
             const secondFollowUpResponse = await this.callAI({
               provider: context.tenant.ai_provider,
               model: context.tenant.ai_model,
               systemPrompt: secondEnrichedPrompt,
               messages: secondUpdatedHistory,
               newMessage: '',
-              tools: [], // No more tools - just want a text response now
+              tools: this.getAvailableTools(context.tenant), // Keep tools for potential booking
               language: params.language,
               tenant: context.tenant,
               contact: context.contact,
             });
             
             console.log(`[AI Agent] Second follow-up response: ${secondFollowUpResponse.message.substring(0, 100)}`);
-            aiResponse.message = secondFollowUpResponse.message;
+            
+            // Handle tool calls from second follow-up (e.g., book_appointment after check_calendar)
+            if (secondFollowUpResponse.toolCalls && secondFollowUpResponse.toolCalls.length > 0) {
+              console.log(`[AI Agent] Second follow-up has ${secondFollowUpResponse.toolCalls.length} tool calls: ${secondFollowUpResponse.toolCalls.map(t => t.name).join(', ')}`);
+              await this.executeTools(secondFollowUpResponse.toolCalls, context);
+              
+              // Check if booking succeeded
+              const bookingCall = secondFollowUpResponse.toolCalls.find(
+                tc => tc.name === 'book_appointment' && tc.result?.success === true
+              );
+              
+              if (bookingCall) {
+                const confirmedIso = bookingCall.result.confirmed_iso;
+                const tenantTimezone = context.tenant.timezone || 'Asia/Dubai';
+                const language = context.contact.language || params.language || 'en';
+                console.log(`[AI Agent] Booking confirmed in second follow-up. ISO=${confirmedIso}`);
+                aiResponse.message = formatBookingConfirmation(confirmedIso, tenantTimezone, language);
+              } else {
+                aiResponse.message = secondFollowUpResponse.message;
+              }
+            } else {
+              aiResponse.message = secondFollowUpResponse.message;
+            }
           } else {
             aiResponse.message = followUpResponse.message;
           }

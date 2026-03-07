@@ -17,7 +17,7 @@ export class OpenAIProvider extends BaseAIProvider {
       // 🔍 DEBUG: Log which tools are being sent to OpenAI
       if (params.tools && params.tools.length > 0) {
         console.log('[OpenAI] Tools sent to OpenAI:', params.tools.map(t => t.function.name).join(', '));
-        console.log('[OpenAI] Tool choice: required');
+        console.log('[OpenAI] Tool choice: auto');
       } else {
         console.log('[OpenAI] ⚠️ NO TOOLS sent to OpenAI');
       }
@@ -35,7 +35,7 @@ export class OpenAIProvider extends BaseAIProvider {
           messages,
           temperature: params.temperature || 0.7,
           max_tokens: params.maxTokens || 1000,
-          ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: 'required' } : {}),
+          ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: 'auto' } : {}),
         }),
       });
 

@@ -106,7 +106,7 @@ export class AnthropicProvider extends BaseAIProvider {
           temperature: params.temperature || 0.7,
           messages: messages.slice(1), // Exclude system message
           system: params.systemPrompt + toolEnforcementInstruction,
-          ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {}),
+          ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: { type: 'auto' } } : {}),
         }),
       });
 
