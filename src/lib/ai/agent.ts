@@ -588,84 +588,39 @@ export class AIAgent {
       maxTokens: 1000,
     };
 
-    // --- Provider Selection: Respect tenant preference ---
-    console.log(`[AI Agent] Tenant prefers provider: ${params.provider || 'none set'}, model: ${params.model || 'none set'}`);
+    // --- SINGLE AI PROVIDER: Claude Sonnet 4 ---
+    // Simplified architecture: One model, no fallbacks, maximum reliability
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
     
-    const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
-    const openaiKey = process.env.OPENAI_API_KEY || '';
-    
-    // Try Anthropic first if tenant prefers it OR if it's the only key available
-    if (params.provider === 'anthropic' || (!openaiKey && anthropicKey)) {
-      if (anthropicKey) {
-        try {
-          console.log('[AI Agent] Using Anthropic (Claude) as primary provider');
-          const validAnthropicModels = [
-            'claude-3-5-sonnet-20240620',
-            'claude-sonnet-4-20250514', // Latest Claude Sonnet 4
-            'claude-3-opus-20240229',
-            'claude-3-sonnet-20240229',
-            'claude-3-haiku-20240307'
-          ];
-          let anthropicModel = 'claude-3-5-sonnet-20240620'; // Default to Sonnet 3.5
-          if (params.model && validAnthropicModels.includes(params.model)) {
-            anthropicModel = params.model;
-          } else if (params.model) {
-            console.warn(`[AI Agent] Invalid Anthropic model '${params.model}', using ${anthropicModel}`);
-          }
-          console.log(`[AI Agent] Using Anthropic model: ${anthropicModel}`);
-          
-          const { AnthropicProvider } = require('./providers/anthropic');
-          const anthropicProvider = new AnthropicProvider(anthropicKey, anthropicModel);
-          const { getAvailableTools: getAnthropicTools } = require('./tools');
-          const anthropicTools = (params.tools && params.tools.length > 0) ? getAnthropicTools('anthropic') : undefined;
-          
-          if (anthropicTools && anthropicTools.length > 0) {
-            console.log(`[AI Agent] Generated ${anthropicTools.length} tools for Anthropic:`, anthropicTools.map(t => t.name).join(', '));
-          }
-          
-          const response = await anthropicProvider.call({ ...callOptions, ...(anthropicTools ? { tools: anthropicTools } : {}) });
-          console.log('[AI Agent] Anthropic response received successfully');
-          return response;
-        } catch (anthropicError) {
-          console.error('[AI Agent] Anthropic call failed:', anthropicError);
-          if (!openaiKey) throw anthropicError; // No fallback available
-          console.warn('[AI Agent] Falling back to OpenAI...');
-        }
-      } else {
-        console.warn('[AI Agent] Anthropic requested but ANTHROPIC_API_KEY not set');
-      }
+    if (!anthropicKey) {
+      console.error('[AI Agent] ANTHROPIC_API_KEY not set - cannot process messages');
+      throw new Error('AI service not configured. Please set ANTHROPIC_API_KEY.');
     }
     
-    // Try OpenAI if tenant prefers it OR as fallback
-    if (openaiKey) {
-      try {
-        console.log('[AI Agent] Using OpenAI as provider');
-        const rawModel = (params.provider === 'openai' && params.model) ? params.model : 'gpt-4o';
-        const openaiModel = rawModel.replace(/^gpt-?4\.0(-turbo)?$/i, 'gpt-4o').replace(/^gpt4o$/i, 'gpt-4o') || 'gpt-4o';
-        console.log(`[AI Agent] Using OpenAI model: ${openaiModel}`);
-        
-        const { OpenAIProvider } = require('./providers/openai');
-        const openaiProvider = new OpenAIProvider(openaiKey, openaiModel);
-        const { getAvailableTools: getOpenAITools } = require('./tools');
-        const openaiTools = (params.tools && params.tools.length > 0) ? getOpenAITools('openai') : undefined;
-        
-        if (openaiTools && openaiTools.length > 0) {
-          console.log(`[AI Agent] Generated ${openaiTools.length} tools for OpenAI:`, openaiTools.map(t => t.function.name).join(', '));
-        } else {
-          console.log('[AI Agent] ⚠️ NO TOOLS generated for OpenAI (params.tools was empty)');
-        }
-        
-        const response = await openaiProvider.call({ ...callOptions, ...(openaiTools ? { tools: openaiTools } : {}) });
-        console.log('[AI Agent] OpenAI response received successfully');
-        return response;
-      } catch (openaiError) {
-        console.error('[AI Agent] OpenAI call failed:', openaiError);
-        throw openaiError;
+    // Always use Claude Sonnet 4 - best balance of quality, speed, and cost
+    const MODEL = 'claude-sonnet-4-20250514';
+    console.log(`[AI Agent] Using Claude Sonnet 4 (${MODEL})`);
+    
+    try {
+      const { AnthropicProvider } = require('./providers/anthropic');
+      const anthropicProvider = new AnthropicProvider(anthropicKey, MODEL);
+      const { getAvailableTools } = require('./tools');
+      const tools = (params.tools && params.tools.length > 0) ? getAvailableTools('anthropic') : undefined;
+      
+      if (tools && tools.length > 0) {
+        console.log(`[AI Agent] Tools available: ${tools.map((t: any) => t.name).join(', ')}`);
       }
+      
+      const response = await anthropicProvider.call({ ...callOptions, ...(tools ? { tools } : {}) });
+      console.log('[AI Agent] Claude response received successfully');
+      return response;
+    } catch (error) {
+      console.error('[AI Agent] Claude API call failed:', error);
+      throw error;
     }
 
-    // --- Hard fallback: static response ---
-    console.error('[AI Agent] All AI providers failed');
+    // --- Hard fallback: static response (only if Claude throws) ---
+    console.error('[AI Agent] AI provider failed');
     const fallbackMessage = this.generateFallbackResponse(params.newMessage, params.language);
     return {
       message: fallbackMessage,
