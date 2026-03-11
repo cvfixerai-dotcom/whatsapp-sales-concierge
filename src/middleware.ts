@@ -33,6 +33,9 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const { pathname } = req.nextUrl;
 
+  // Add pathname to headers so server components can access it
+  res.headers.set('x-pathname', pathname);
+
   // Always allow public paths without touching session
   if (isPublic(pathname)) return res;
 

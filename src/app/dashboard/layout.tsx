@@ -2,10 +2,14 @@
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/db/client';
+import { headers } from 'next/headers';
 import DashboardShell from './DashboardShell';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // 1. Auth check
+  // Get current pathname to avoid redirect loops
+  const headersList = headers();
+  const pathname = headersList.get('x-pathname') || '';
   const sessionUser = await getSessionUser();
   if (!sessionUser) redirect('/auth/login');
 
@@ -50,7 +54,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
 
     // Guard C: past_due → billing
-    if (tenant.subscription_status === 'past_due') redirect('/dashboard/billing');
+    const isBillingPage = pathname.includes('/billing');
+    if (tenant.subscription_status === 'past_due' && !isBillingPage) redirect('/dashboard/billing');
   }
 
   // Compute trial countdown for banner
