@@ -404,7 +404,7 @@ function SettingsPageContent() {
 
   return (
     <div className="max-w-4xl">
-            {/* Header */}
+      {/* Header */}
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
                 <Settings className="h-8 w-8 text-gray-600" />
