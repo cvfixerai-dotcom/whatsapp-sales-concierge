@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Calendar, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface CalendarSettingsProps {
@@ -11,6 +12,21 @@ interface CalendarSettingsProps {
 export default function CalendarSettings({ settings, onRefresh }: CalendarSettingsProps) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const searchParams = useSearchParams();
+
+  // Handle OAuth callback success
+  useEffect(() => {
+    const success = searchParams.get('success');
+    if (success === 'true') {
+      setMessage({ type: 'success', text: 'Google Calendar connected successfully!' });
+      onRefresh();
+      
+      // Clear the success param from URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('success');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [searchParams, onRefresh]);
 
   async function handleDisconnectGoogle() {
     if (!confirm('Are you sure you want to disconnect Google Calendar? Existing appointments will remain in your calendar.')) {

@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
     console.log(`[Google Calendar] Successfully connected for tenant ${tenantId}`);
 
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard/settings?success=google_calendar_connected`
+      `${process.env.NEXTAUTH_URL}/dashboard/settings?tab=calendar&success=true`
     );
   } catch (error) {
     console.error('[Google Calendar Callback] Unexpected error:', error);
