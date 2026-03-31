@@ -89,7 +89,7 @@ export async function getAvailableSlots(
   console.log('[CHECK_CALENDAR] Server timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
   const slotDuration = settings.slot_duration || 30;
   const bufferTime = settings.buffer_time || 0;
-  const minNoticeHours = Math.max(0.5, settings.min_notice_hours || 0.5);
+  const minNoticeHours = settings.min_notice_hours || 2;
   const bookingWindowDays = settings.booking_window_days || 30;
   const maxPerDay = settings.max_per_day || 20;
 

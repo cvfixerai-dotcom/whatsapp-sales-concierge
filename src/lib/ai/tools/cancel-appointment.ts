@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
+import { updateLead } from './update-lead';
 
 interface CancelAppointmentParams {
   tenantId: string;
@@ -33,6 +34,17 @@ export async function cancelAppointment({
         return { success: false, error: 'Failed to cancel appointment' };
       }
 
+      // Update contact temperature back to 'warm' to re-enable follow-ups
+      await updateLead({
+        contactId,
+        updates: {
+          temperature: 'warm',
+          metadata: {
+            last_cancellation_at: new Date().toISOString(),
+          },
+        },
+      });
+
       return { success: true, message: 'Appointment cancelled successfully' };
     }
 
@@ -63,6 +75,18 @@ export async function cancelAppointment({
     }
 
     console.log(`[Tool: cancelAppointment] Cancelled appointment ${appointment.id}`);
+    
+    // Update contact temperature back to 'warm' to re-enable follow-ups
+    await updateLead({
+      contactId,
+      updates: {
+        temperature: 'warm',
+        metadata: {
+          last_cancellation_at: new Date().toISOString(),
+        },
+      },
+    });
+    
     return { 
       success: true, 
       message: `Appointment for ${new Date(appointment.scheduled_time).toLocaleString()} has been cancelled` 

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { getAvailableSlots, getAvailabilitySettings } from '../../services/calendar/inapp';
+import { GoogleCalendarProvider } from '../../services/calendar/google';
 
 interface CheckCalendarParams {
   tenantId: string;
@@ -138,6 +139,52 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
       daysAhead: daysAhead || 'default (7)'
     });
 
+    // Check if Google Calendar is configured
+    const { data: tenant } = await supabaseAdmin
+      .from('tenants')
+      .select('calendar_provider, google_refresh_token, google_calendar_id')
+      .eq('id', tenantId)
+      .single();
+
+    // Route to Google Calendar if configured
+    if (tenant?.calendar_provider === 'google' && tenant?.google_refresh_token) {
+      console.log('[Tool: checkCalendar] Using Google Calendar provider');
+      const googleProvider = new GoogleCalendarProvider();
+      const settings = await getAvailabilitySettings(tenantId);
+      const timezone = settings?.timezone || 'Asia/Dubai';
+      
+      const result = await googleProvider.checkAvailability(
+        {
+          googleCalendarId: tenant.google_calendar_id,
+          googleRefreshToken: tenant.google_refresh_token,
+          timezone,
+          businessHours: settings,
+        },
+        preferredDate
+      );
+
+      if (!result.success) {
+        console.warn('[Tool: checkCalendar] Google Calendar failed, falling back to in-app');
+        // Fall through to in-app calendar
+      } else {
+        const slots = result.availableSlots || [];
+        await storeLastSlots(contactId, slots, timezone);
+        console.log(`[Tool: checkCalendar] Returning ${slots.length} Google Calendar slots`);
+        console.log('=== END CHECK CALENDAR ===\n');
+        return {
+          success: true,
+          available_slots: slots.map(s => ({
+            datetime: s.datetime,
+            formatted: s.formatted,
+            dayName: s.dayName || new Date(s.datetime).toLocaleDateString('en-US', { weekday: 'long', timeZone: timezone }),
+            dateOnly: s.dateOnly || new Date(s.datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone }),
+          })),
+        };
+      }
+    }
+
+    // Use in-app calendar (default or fallback)
+    console.log('[Tool: checkCalendar] Using in-app calendar provider');
     const settings = await getAvailabilitySettings(tenantId);
     const timezone = settings?.timezone || 'Asia/Dubai'; // Business timezone (no user timezone)
     

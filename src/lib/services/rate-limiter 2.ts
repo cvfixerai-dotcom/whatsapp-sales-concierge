@@ -34,14 +34,9 @@ export class RateLimiter {
   // Lazy getter for Redis
   private get redis(): any {
     if (!this._redis) {
-      try {
-        // Import dynamically to avoid initialization issues
-        const { redisQueue } = require('../queue/redis');
-        this._redis = redisQueue.getRedis();
-      } catch (error) {
-        console.warn('[RateLimiter] Redis initialization failed (non-fatal):', error);
-        return null;
-      }
+      // Import dynamically to avoid initialization issues
+      const { redisQueue } = require('../queue/redis');
+      this._redis = redisQueue.getRedis();
     }
     return this._redis;
   }
@@ -71,12 +66,6 @@ export class RateLimiter {
 
       // Use Redis for fast rate limiting checks
       const cacheKey = `rate_limit:${tenantId}:${phoneNumber}`;
-      
-      // If Redis is unavailable, allow the message (fail open)
-      if (!this.redis) {
-        console.warn('[RateLimiter] Redis unavailable, allowing message');
-        return { allowed: true, error: 'Redis unavailable' };
-      }
       
       if (!options.bypassCache) {
         // Check Redis cache first
@@ -186,8 +175,8 @@ export class RateLimiter {
         remaining: Math.min(...Object.values(remaining)),
       };
     } catch (error) {
-      console.warn('[RateLimiter] Rate limit check failed (allowing message):', error);
-      // Allow the message if rate limit check fails (fail open for availability)
+      console.error('Error checking rate limit:', error);
+      // Allow the message if rate limit check fails
       return { allowed: true, error: 'Rate limit check failed' };
     }
   }
@@ -200,12 +189,6 @@ export class RateLimiter {
     phoneNumber: string
   ): Promise<void> {
     try {
-      // If Redis is unavailable, skip recording (non-fatal)
-      if (!this.redis) {
-        console.warn('[RateLimiter] Redis unavailable, skipping message recording');
-        return;
-      }
-
       const now = Date.now();
       const today = new Date().toISOString().slice(0, 10);
       const thisMonth = new Date().toISOString().slice(0, 7);
@@ -228,7 +211,7 @@ export class RateLimiter {
       // Also record in database for analytics
       await this.recordInDatabase(tenantId, phoneNumber);
     } catch (error) {
-      console.warn('[RateLimiter] Error recording message sent (non-fatal):', error);
+      console.error('Error recording message sent:', error);
     }
   }
 

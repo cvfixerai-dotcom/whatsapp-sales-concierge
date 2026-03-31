@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../db/client';
 import { updateLead } from './update-lead';
 import { sendEmail } from './send-email';
 import { bookSlot } from '../../services/calendar/inapp';
+import { GoogleCalendarProvider } from '../../services/calendar/google';
 
 interface BookingParams {
   tenantId: string;
@@ -119,7 +120,7 @@ export async function bookAppointment({
       await Promise.all([
         supabaseAdmin
           .from('tenants')
-          .select('company_name, language, business_hours, timezone')
+          .select('company_name, language, business_hours, timezone, calendar_provider, google_refresh_token, google_calendar_id')
           .eq('id', tenantId)
           .single(),
         supabaseAdmin
@@ -180,6 +181,56 @@ export async function bookAppointment({
     console.log(`[Tool: bookAppointment] Appointment ID: ${appointmentId}`);
     console.log(`[Tool: bookAppointment] Scheduled time (UTC): ${resolvedIso}`);
     console.log(`[Tool: bookAppointment] Database record:`, bookingResult.appointment);
+
+    // 5b. If Google Calendar is configured, create event there too
+    let googleEventId: string | undefined;
+    let googleMeetLink: string | undefined;
+    
+    if (tenant.calendar_provider === 'google' && tenant.google_refresh_token && tenant.google_calendar_id) {
+      console.log('[Tool: bookAppointment] Creating Google Calendar event...');
+      try {
+        const googleProvider = new GoogleCalendarProvider();
+        const googleResult = await googleProvider.bookAppointment(
+          {
+            googleCalendarId: tenant.google_calendar_id,
+            googleRefreshToken: tenant.google_refresh_token,
+            timezone: tenant.timezone || 'Asia/Dubai',
+          },
+          resolvedIso,
+          {
+            name: inviteeName,
+            email: inviteeEmail,
+            phone: contact.whatsapp_number,
+          },
+          {
+            title: `${companyName} - ${inviteeName}`,
+            description: `Booked via WhatsApp\nPhone: ${contact.whatsapp_number}`,
+            duration: 30,
+          }
+        );
+
+        if (googleResult.success) {
+          googleEventId = googleResult.eventId;
+          googleMeetLink = googleResult.meetingLink;
+          console.log(`[Tool: bookAppointment] ✅ Google Calendar event created: ${googleEventId}`);
+          
+          // Update appointment record with Google event details
+          await supabaseAdmin
+            .from('appointments')
+            .update({
+              calendar_event_id: googleEventId,
+              meeting_link: googleMeetLink,
+              calendar_provider: 'google',
+            })
+            .eq('id', appointmentId);
+        } else {
+          console.warn('[Tool: bookAppointment] Google Calendar event creation failed (non-fatal):', googleResult.error);
+        }
+      } catch (googleError) {
+        console.error('[Tool: bookAppointment] Google Calendar error (non-fatal):', googleError);
+      }
+    }
+
     console.log('=== END BOOK APPOINTMENT ===\n');
 
     // 6. Update contact
@@ -190,8 +241,9 @@ export async function bookAppointment({
         qualification_status: 'contacted',
         metadata: {
           last_booking_at: new Date().toISOString(),
-          calendar_provider: 'inapp',
+          calendar_provider: tenant.calendar_provider || 'inapp',
           appointment_id: appointmentId,
+          google_event_id: googleEventId,
         },
       },
     });
@@ -205,7 +257,7 @@ export async function bookAppointment({
           data: {
             company_name: companyName,
             meeting_time: resolvedIso,
-            meeting_link: 'Details will be shared before the meeting',
+            meeting_link: googleMeetLink || 'Details will be shared before the meeting',
             customer_name: inviteeName,
           },
         });
@@ -218,6 +270,7 @@ export async function bookAppointment({
     return {
       success: true,
       confirmed_iso: resolvedIso,
+      meeting_link: googleMeetLink,
     };
   } catch (error) {
     console.error('[Tool: bookAppointment] Unexpected error:', error);
