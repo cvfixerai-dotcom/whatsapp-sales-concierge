@@ -4,6 +4,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase-browser';
 import { SkeletonPulse } from '@/components/skeletons';
+import CalendarSettings from './CalendarSettings';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TeamSection from '@/components/TeamSection';
 import {
@@ -429,6 +430,17 @@ function SettingsPageContent() {
               AI Configuration
             </button>
             <button
+              onClick={() => setActiveTab('calendar')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'calendar'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Calendar className="inline h-4 w-4 mr-2" />
+              Calendar
+            </button>
+            <button
               onClick={() => setActiveTab('templates')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'templates'
@@ -485,6 +497,12 @@ function SettingsPageContent() {
             }`}
           >
             {message.type === 'success' ? (
+        {/* Calendar Section */}
+        {activeTab === 'calendar' && (
+          <CalendarSettings settings={settings} onRefresh={fetchSettings} />
+        )}
+
+
               <CheckCircle className="h-5 w-5" />
             ) : (
               <AlertCircle className="h-5 w-5" />
