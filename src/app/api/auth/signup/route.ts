@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
         trial_end_date: trialEnd.toISOString(),
         trial_conversation_limit: 25,
         monthly_conversation_limit: 25,
-        ai_provider: 'openai',
-        ai_model: 'gpt-4o',
+        ai_provider: 'anthropic',
+        ai_model: 'claude-sonnet-4-20250514',
         business_hours: {},
         setup_completed: false,
       })
