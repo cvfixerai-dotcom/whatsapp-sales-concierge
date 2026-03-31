@@ -498,10 +498,6 @@ function SettingsPageContent() {
           >
             {message.type === 'success' ? (
         {/* Calendar Section */}
-        {activeTab === 'calendar' && (
-          <CalendarSettings settings={settings} onRefresh={fetchSettings} />
-        )}
-
 
               <CheckCircle className="h-5 w-5" />
             ) : (
