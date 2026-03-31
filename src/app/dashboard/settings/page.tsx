@@ -497,7 +497,6 @@ function SettingsPageContent() {
             }`}
           >
             {message.type === 'success' ? (
-        {/* Calendar Section */}
 
               <CheckCircle className="h-5 w-5" />
             ) : (
@@ -513,6 +512,11 @@ function SettingsPageContent() {
           </div>
         )}
 
+
+        {/* Calendar Section */}
+        {activeTab === 'calendar' && (
+          <CalendarSettings settings={settings} onRefresh={fetchSettings} />
+        )}
 
         {/* AI Configuration Section */}
         {activeTab === 'ai' && (
