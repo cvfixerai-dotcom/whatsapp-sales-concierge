@@ -405,17 +405,17 @@ function SettingsPageContent() {
   return (
     <div className="max-w-4xl">
       {/* Header */}
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Settings className="h-8 w-8 text-gray-600" />
-                Settings
-              </h1>
-              <p className="mt-2 text-gray-600">
-                Configure your AI assistant, templates, and notification preferences
-              </p>
-            </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+          <Settings className="h-8 w-8 text-gray-600" />
+          Settings
+        </h1>
+        <p className="mt-2 text-gray-600">
+          Configure your AI assistant, templates, and notification preferences
+        </p>
+      </div>
 
-        {/* Tab Navigation */}
+      {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200 sticky top-16 z-20 bg-gray-50 -mx-6 px-6">
           <nav className="flex space-x-8 overflow-x-auto">
             <button
