@@ -17,6 +17,21 @@ export async function sendEmail({
   try {
     console.log(`[Tool: sendEmail] Sending email to ${to} with template ${template}`);
 
+    // Validate email address before attempting to send
+    const hasRealEmail = to && 
+      to.includes('@') && 
+      !to.includes('@wa.placeholder') &&
+      !to.includes('@placeholder') &&
+      to.split('@')[1]?.includes('.');
+
+    if (!hasRealEmail) {
+      console.warn('[Tool: sendEmail] Invalid email address:', to);
+      return { 
+        success: false, 
+        error: 'Invalid email address - not sent' 
+      };
+    }
+
     // Check Resend configuration
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.RESEND_FROM_EMAIL;

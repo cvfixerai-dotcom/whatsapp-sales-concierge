@@ -99,11 +99,6 @@ export class GoogleCalendarProvider implements ICalendarProvider {
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + 14); // 2 weeks
 
-      console.log('[Google Cal Debug] timeMin:', startDate.toISOString());
-      console.log('[Google Cal Debug] timeMax:', endDate.toISOString());
-      console.log('[Google Cal Debug] timezone:', config.timezone || 'UTC');
-      console.log('[Google Cal Debug] businessHours:', JSON.stringify(config.businessHours, null, 2));
-
       // Get busy times from Google Calendar
       const freeBusyResponse = await fetch(
         `${GOOGLE_CALENDAR_API}/freeBusy`,
@@ -134,10 +129,6 @@ export class GoogleCalendarProvider implements ICalendarProvider {
       const freeBusyData = await freeBusyResponse.json();
       const busyTimes = freeBusyData.calendars?.[config.googleCalendarId]?.busy || [];
 
-      console.log('[Google Cal Debug] FreeBusy response:', JSON.stringify(freeBusyData, null, 2));
-      console.log('[Google Cal Debug] Busy times count:', busyTimes.length);
-      console.log('[Google Cal Debug] Busy times:', busyTimes);
-
       // Generate available slots based on business hours
       const availableSlots = this.generateAvailableSlots(
         startDate,
@@ -146,13 +137,6 @@ export class GoogleCalendarProvider implements ICalendarProvider {
         config.businessHours,
         config.timezone
       );
-
-      console.log('[Google Cal Debug] Slots generated:', availableSlots.length);
-      if (availableSlots.length > 0) {
-        console.log('[Google Cal Debug] First 3 slots:', availableSlots.slice(0, 3));
-      } else {
-        console.log('[Google Cal Debug] ⚠️ NO SLOTS GENERATED');
-      }
 
       return {
         success: true,
@@ -346,9 +330,6 @@ export class GoogleCalendarProvider implements ICalendarProvider {
     const slots: CalendarSlot[] = [];
     const slotDuration = 60; // 60 minutes per slot
     
-    console.log('[Google Cal Debug] generateAvailableSlots called');
-    console.log('[Google Cal Debug] businessHours param:', JSON.stringify(businessHours, null, 2));
-    
     // Default business hours
     const defaultHours = {
       monday: { open: '09:00', close: '17:00' },
@@ -361,18 +342,13 @@ export class GoogleCalendarProvider implements ICalendarProvider {
     };
 
     const hours = businessHours || defaultHours;
-    console.log('[Google Cal Debug] Using hours:', JSON.stringify(hours, null, 2));
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
     // Iterate through each day
     const currentDate = new Date(startDate);
-    let daysProcessed = 0;
     while (currentDate < endDate && slots.length < 20) {
       const dayName = dayNames[currentDate.getDay()];
       const dayHours = hours[dayName];
-      daysProcessed++;
-      
-      console.log(`[Google Cal Debug] Day ${daysProcessed}: ${dayName}, hours:`, dayHours);
 
       if (dayHours && dayHours.open && dayHours.close) {
         // Parse business hours
@@ -425,8 +401,6 @@ export class GoogleCalendarProvider implements ICalendarProvider {
       currentDate.setHours(0, 0, 0, 0);
     }
 
-    console.log(`[Google Cal Debug] Total days processed: ${daysProcessed}`);
-    console.log(`[Google Cal Debug] Total slots before filter: ${slots.length}`);
     return slots;
   }
 

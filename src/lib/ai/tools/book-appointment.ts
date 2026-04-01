@@ -248,8 +248,15 @@ export async function bookAppointment({
       },
     });
 
-    // 7. Send confirmation email (non-fatal)
-    if (contact.email && !contact.email.includes('@wa.placeholder')) {
+    // 7. Send confirmation email (non-fatal) - only if we have a real email
+    const hasRealEmail = contact.email && 
+      contact.email.includes('@') && 
+      !contact.email.includes('@wa.placeholder') &&
+      !contact.email.includes('@placeholder') &&
+      contact.email.split('@')[1]?.includes('.');
+
+    if (hasRealEmail) {
+      console.log('[Tool: bookAppointment] Sending confirmation email to:', contact.email);
       try {
         await sendEmail({
           to: contact.email,
@@ -264,6 +271,8 @@ export async function bookAppointment({
       } catch (emailError) {
         console.error('[Tool: bookAppointment] Email sending failed (non-fatal):', emailError);
       }
+    } else {
+      console.log('[Tool: bookAppointment] No real email yet - AI will collect it post-booking');
     }
 
     // 8. Return confirmed ISO — agent.ts will format the confirmation message, not the AI
