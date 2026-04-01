@@ -153,12 +153,25 @@ export async function checkCalendar({ tenantId, contactId, preferredDate, prefer
       const settings = await getAvailabilitySettings(tenantId);
       const timezone = settings?.timezone || 'Asia/Dubai';
       
+      // Convert availability_settings to business_hours format expected by Google provider
+      const businessHours = {
+        monday: settings.monday_enabled ? { open: settings.monday_start?.substring(0, 5) || '09:00', close: settings.monday_end?.substring(0, 5) || '17:00' } : null,
+        tuesday: settings.tuesday_enabled ? { open: settings.tuesday_start?.substring(0, 5) || '09:00', close: settings.tuesday_end?.substring(0, 5) || '17:00' } : null,
+        wednesday: settings.wednesday_enabled ? { open: settings.wednesday_start?.substring(0, 5) || '09:00', close: settings.wednesday_end?.substring(0, 5) || '17:00' } : null,
+        thursday: settings.thursday_enabled ? { open: settings.thursday_start?.substring(0, 5) || '09:00', close: settings.thursday_end?.substring(0, 5) || '17:00' } : null,
+        friday: settings.friday_enabled ? { open: settings.friday_start?.substring(0, 5) || '09:00', close: settings.friday_end?.substring(0, 5) || '17:00' } : null,
+        saturday: settings.saturday_enabled ? { open: settings.saturday_start?.substring(0, 5) || '09:00', close: settings.saturday_end?.substring(0, 5) || '17:00' } : null,
+        sunday: settings.sunday_enabled ? { open: settings.sunday_start?.substring(0, 5) || '09:00', close: settings.sunday_end?.substring(0, 5) || '17:00' } : null,
+      };
+      
+      console.log('[Tool: checkCalendar] Converted business hours for Google:', businessHours);
+      
       const result = await googleProvider.checkAvailability(
         {
           googleCalendarId: tenant.google_calendar_id,
           googleRefreshToken: tenant.google_refresh_token,
           timezone,
-          businessHours: settings,
+          businessHours,
         },
         preferredDate
       );

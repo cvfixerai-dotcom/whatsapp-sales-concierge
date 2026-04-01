@@ -50,6 +50,15 @@ export default function OnboardingPage() {
     channels: { dashboard: true, email: true, whatsapp: false, telegram: false },
     recipients: { email: '', whatsapp: '', telegram_chat_id: '' },
   });
+  const [businessHours, setBusinessHours] = useState({
+    monday:    { open: '09:00', close: '18:00', closed: false },
+    tuesday:   { open: '09:00', close: '18:00', closed: false },
+    wednesday: { open: '09:00', close: '18:00', closed: false },
+    thursday:  { open: '09:00', close: '18:00', closed: false },
+    friday:    { open: '09:00', close: '18:00', closed: false },
+    saturday:  { open: '09:00', close: '18:00', closed: false },
+    sunday:    { open: '09:00', close: '18:00', closed: true },
+  });
 
   // Step 1: verify Supabase session
   useEffect(() => {
@@ -136,7 +145,7 @@ export default function OnboardingPage() {
       case 0: stepData = businessProfile; break;
       case 1: stepData = twilioSetup; break;
       case 2: stepData = aiConfig; break;
-      case 3: stepData = {}; break;
+      case 3: stepData = { business_hours: businessHours }; break;
       case 4: stepData = { handoff_settings: handoffSetup }; break;
     }
 
@@ -396,20 +405,54 @@ export default function OnboardingPage() {
 
           {/* Step 3: Calendar Setup */}
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <svg className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-1">In-App Calendar Ready</h4>
-                    <p className="text-sm text-gray-700">
-                      Your calendar is built-in and ready to use. Configure availability in the Calendar section after setup.
-                    </p>
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-green-800 font-medium">✅ Calendar system ready</p>
+                <p className="text-green-700 text-sm mt-1">
+                  Set your business hours below so clients can book appointments at the right times.
+                </p>
               </div>
+
+              {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
+                <div key={day} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="w-28 capitalize font-medium text-gray-700">{day}</div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!businessHours[day].closed}
+                      onChange={(e) => setBusinessHours(prev => ({
+                        ...prev,
+                        [day]: { ...prev[day], closed: !e.target.checked }
+                      }))}
+                      className="h-4 w-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-600">Open</span>
+                  </label>
+                  {!businessHours[day].closed && (
+                    <>
+                      <input
+                        type="time"
+                        value={businessHours[day].open}
+                        onChange={(e) => setBusinessHours(prev => ({
+                          ...prev,
+                          [day]: { ...prev[day], open: e.target.value }
+                        }))}
+                        className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-gray-500">to</span>
+                      <input
+                        type="time"
+                        value={businessHours[day].close}
+                        onChange={(e) => setBusinessHours(prev => ({
+                          ...prev,
+                          [day]: { ...prev[day], close: e.target.value }
+                        }))}
+                        className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 

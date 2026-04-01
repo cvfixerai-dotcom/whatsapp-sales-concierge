@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { createClient } from '@supabase/supabase-js';
+import { initializeTenantDefaults } from '@/lib/services/tenant-initializer';
 
 const supabaseAuth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -89,6 +90,18 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.from('tenants').delete().eq('id', tenant.id);
       await supabaseAdmin.auth.admin.deleteUser(authUserId);
       return NextResponse.json({ error: 'Failed to create user record' }, { status: 500 });
+    }
+
+    // Auto-initialize tenant with defaults after creation
+    try {
+      await initializeTenantDefaults(tenant.id, {
+        timezone: 'UTC', // Will be updated during onboarding
+        industry: 'other', // Will be updated during onboarding
+      });
+      console.log('[Signup] ✅ Tenant defaults initialized');
+    } catch (error) {
+      console.error('[Signup] Failed to initialize tenant defaults:', error);
+      // Non-fatal - tenant can still complete onboarding
     }
 
     console.log(`[Signup] Created: auth=${authUserId} tenant=${tenant.id} email=${normalizedEmail}`);

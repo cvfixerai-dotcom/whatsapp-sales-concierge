@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/supabase-server';
 import { createDefaultFollowUpSequences } from '@/lib/services/followup-templates';
+import { initializeTenantDefaults } from '@/lib/services/tenant-initializer';
 
 export async function GET(request: NextRequest) {
   try {
@@ -168,7 +169,24 @@ export async function POST(request: NextRequest) {
           if (data.ai_assistant_name) updates.ai_assistant_name = data.ai_assistant_name;
           break;
 
-        case 3: // Calendar Setup — internal calendar only, no external providers
+        case 3: // Calendar Setup — initialize availability_settings with business hours
+          // Get current tenant data to use timezone and industry
+          const { data: tenantData } = await supabaseAdmin
+            .from('tenants')
+            .select('timezone, industry')
+            .eq('id', sessionUser.tenantId)
+            .single();
+          
+          const timezone = tenantData?.timezone || 'UTC';
+          const industry = tenantData?.industry || 'other';
+          const businessHours = data.business_hours || null;
+          
+          await initializeTenantDefaults(sessionUser.tenantId, {
+            timezone,
+            industry,
+            businessHours,
+          });
+          console.log('[Onboarding] ✅ Calendar initialized for tenant');
           break;
 
         case 4: // Handoff Setup
