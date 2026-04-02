@@ -44,7 +44,11 @@ async function resolveFromLastOfferedSlots(
     ? contact.metadata.calendar_last_slots
     : [];
 
+  console.log('[bookAppointment] Requested slotTime:', isoDatetime);
+  console.log('[bookAppointment] Available last slots:', JSON.stringify(lastSlots, null, 2));
+
   if (!lastSlots.length) {
+    console.log('[bookAppointment] No last slots found in contact metadata');
     return null;
   }
 
@@ -53,6 +57,8 @@ async function resolveFromLastOfferedSlots(
     const slotMs = new Date(slot.datetime).getTime();
     return slotMs === inputMs;
   });
+
+  console.log('[bookAppointment] Matched slot:', match ? JSON.stringify(match) : 'NOT FOUND');
 
   return match ? match.datetime : null;
 }
@@ -145,7 +151,33 @@ export async function bookAppointment({
     const inviteeName = contact.name || 'Customer';
     const companyName = tenant.company_name || 'Our Team';
 
-    // 4. Book the slot
+    // 4. Check for existing bookings to prevent double booking
+    const { data: existingBooking } = await supabaseAdmin
+      .from('appointments')
+      .select('id, scheduled_time, status')
+      .eq('contact_id', contactId)
+      .eq('status', 'scheduled')
+      .gte('scheduled_time', new Date().toISOString())
+      .lte('scheduled_time', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString())
+      .maybeSingle();
+
+    if (existingBooking) {
+      console.log('[bookAppointment] ⚠️ Contact already has booking:', existingBooking.id);
+      return {
+        success: false,
+        error: `You already have a booking scheduled for ${new Date(existingBooking.scheduled_time).toLocaleString('en-US', { 
+          weekday: 'long', 
+          month: 'long', 
+          day: 'numeric', 
+          hour: 'numeric', 
+          minute: '2-digit',
+          timeZone: tenant.timezone || 'UTC'
+        })}. Please cancel it first if you'd like to reschedule.`,
+        existing_booking: existingBooking
+      };
+    }
+
+    // 5. Book the slot
     console.log('[Tool: bookAppointment] Booking slot with:', {
       scheduledAt: resolvedIso,
       customerName: inviteeName,

@@ -529,7 +529,7 @@ export class AIAgent {
     // Check if there's a recent booking (within last 30 minutes)
     const { data: recentBooking } = await supabaseAdmin
       .from('appointments')
-      .select('id, scheduled_at, customer_name, status, created_at')
+      .select('id, scheduled_time, customer_name, status, created_at')
       .eq('contact_id', contact.id)
       .eq('status', 'scheduled')
       .order('created_at', { ascending: false })
@@ -539,12 +539,22 @@ export class AIAgent {
     const hasRecentBooking = recentBooking && 
       new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000);
 
+    console.log('[Agent] Recent booking check:', {
+      hasRecentBooking,
+      recentBookingId: recentBooking?.id,
+      recentBookingTime: recentBooking?.created_at,
+      windowCheck: recentBooking ? 
+        new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000) : false,
+      currentTime: new Date().toISOString(),
+      windowCutoff: new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    });
+
     // Build base system prompt
     let systemPrompt = buildSystemPrompt(tenant, contact, language, history);
 
     // Inject POST-BOOKING STATE if booking was just made
     if (hasRecentBooking) {
-      const bookingTime = new Date(recentBooking.scheduled_at).toLocaleString('en-US', {
+      const bookingTime = new Date(recentBooking.scheduled_time).toLocaleString('en-US', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -552,6 +562,8 @@ export class AIAgent {
         minute: '2-digit',
         timeZone: tenant.timezone || 'UTC',
       });
+
+      console.log('[Agent] 🚨 POST-BOOKING STATE ACTIVE - Injecting warning into system prompt');
 
       systemPrompt += `
 
