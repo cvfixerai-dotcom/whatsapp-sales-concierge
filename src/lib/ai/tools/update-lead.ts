@@ -51,11 +51,24 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       timeline: existingContact.timeline,
     });
 
-    // Prepare update data
-    const updateData = {
+    // Prepare update data - merge metadata with existing to preserve calendar_last_slots etc.
+    const updateData: any = {
       ...updates,
       updated_at: new Date().toISOString(),
     };
+
+    // If updating metadata, merge with existing metadata
+    if (updates.metadata && existingContact.metadata) {
+      updateData.metadata = {
+        ...(typeof existingContact.metadata === 'object' && !Array.isArray(existingContact.metadata) 
+          ? existingContact.metadata 
+          : {}),
+        ...updates.metadata,
+      };
+      console.log('[Tool: updateLead] Merging metadata - existing keys:', Object.keys(existingContact.metadata || {}));
+      console.log('[Tool: updateLead] Merging metadata - new keys:', Object.keys(updates.metadata || {}));
+      console.log('[Tool: updateLead] Merging metadata - final keys:', Object.keys(updateData.metadata));
+    }
 
     // Only update qualification_status if temperature is being updated
     if (updates.temperature) {
@@ -92,6 +105,16 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       budget_range: updatedContact.budget_range,
       timeline: updatedContact.timeline,
     });
+
+    // CRITICAL: Verify temperature was actually updated
+    if (updates.temperature && updatedContact.temperature !== updates.temperature) {
+      console.error('[Tool: updateLead] 🚨 TEMPERATURE UPDATE FAILED!');
+      console.error('[Tool: updateLead] Expected:', updates.temperature);
+      console.error('[Tool: updateLead] Got:', updatedContact.temperature);
+      console.error('[Tool: updateLead] This is a critical bug - temperature did not persist to database');
+    } else if (updates.temperature) {
+      console.log('[Tool: updateLead] ✅ Temperature successfully updated to:', updatedContact.temperature);
+    }
 
     // Recalculate lead score
     const newScore = await calculateLeadScore(updatedContact);

@@ -265,8 +265,9 @@ export async function bookAppointment({
 
     console.log('=== END BOOK APPOINTMENT ===\n');
 
-    // 6. Update contact
-    await updateLead({
+    // 6. Update contact - CRITICAL: Must set temperature to 'booked'
+    console.log('[bookAppointment] Calling updateLead to set temperature=booked');
+    const updateResult = await updateLead({
       contactId,
       updates: {
         temperature: 'booked',
@@ -279,6 +280,14 @@ export async function bookAppointment({
         },
       },
     });
+
+    if (!updateResult.success) {
+      console.error('[bookAppointment] 🚨 CRITICAL: updateLead FAILED - temperature not set to booked!');
+      console.error('[bookAppointment] Error:', updateResult.error);
+    } else {
+      console.log('[bookAppointment] ✅ updateLead successful - contact temperature should be "booked"');
+      console.log('[bookAppointment] Updated contact temperature:', updateResult.contact?.temperature);
+    }
 
     // 7. Send confirmation email (non-fatal) - only if we have a real email
     const hasRealEmail = contact.email && 
