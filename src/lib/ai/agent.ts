@@ -526,8 +526,46 @@ export class AIAgent {
       .map(m => `${m.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m.content}`)
       .join('\n');
 
-    // Use the new prompt system
-    return buildSystemPrompt(tenant, contact, language, history);
+    // Check if there's a recent booking (within last 30 minutes)
+    const { data: recentBooking } = await supabaseAdmin
+      .from('appointments')
+      .select('id, scheduled_at, customer_name, status, created_at')
+      .eq('contact_id', contact.id)
+      .eq('status', 'scheduled')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const hasRecentBooking = recentBooking && 
+      new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000);
+
+    // Build base system prompt
+    let systemPrompt = buildSystemPrompt(tenant, contact, language, history);
+
+    // Inject POST-BOOKING STATE if booking was just made
+    if (hasRecentBooking) {
+      const bookingTime = new Date(recentBooking.scheduled_at).toLocaleString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: tenant.timezone || 'UTC',
+      });
+
+      systemPrompt += `
+
+⚠️⚠️⚠️ POST-BOOKING STATE ACTIVE ⚠️⚠️⚠️
+The customer just booked an appointment for ${bookingTime}.
+Do NOT offer more slots. Do NOT call check_calendar. Do NOT restart qualification.
+Your ONLY task: Ask for their email address to send confirmation.
+If they say "thanks", "ok", "great", etc. → Ask: "To send you a confirmation, what's your email address?"
+If they decline email → Wish them well and stop.
+⚠️⚠️⚠️ POST-BOOKING STATE ACTIVE ⚠️⚠️⚠️
+`;
+    }
+
+    return systemPrompt;
   }
 
   /**
