@@ -292,18 +292,39 @@ export async function bookAppointment({
       console.log('[bookAppointment] Updated contact temperature:', updateResult.contact?.temperature);
     }
 
+    // 6b. REFRESH contact data from DB before email check (critical for accuracy)
+    console.log('[bookAppointment] Refreshing contact data from DB before email check...');
+    const { data: freshContact } = await supabaseAdmin
+      .from('contacts')
+      .select('email, name')
+      .eq('id', contactId)
+      .single();
+    
+    console.log('[bookAppointment] Contact email at booking time (fresh from DB):', freshContact?.email);
+    console.log('[bookAppointment] Contact name at booking time (fresh from DB):', freshContact?.name);
+
     // 7. Send confirmation email (non-fatal) - only if we have a real email
-    const hasRealEmail = contact.email && 
-      contact.email.includes('@') && 
-      !contact.email.includes('@wa.placeholder') &&
-      !contact.email.includes('@placeholder') &&
-      contact.email.split('@')[1]?.includes('.');
+    // Use the FRESH contact data, not the potentially stale 'contact' variable
+    const emailToCheck = freshContact?.email || contact.email;
+    const hasRealEmail = emailToCheck && 
+      emailToCheck.includes('@') && 
+      !emailToCheck.includes('@wa.placeholder') &&
+      !emailToCheck.includes('@placeholder') &&
+      emailToCheck.split('@')[1]?.includes('.');
+
+    console.log('[bookAppointment] Email validation result:', { 
+      emailToCheck, 
+      hasRealEmail,
+      includesAt: emailToCheck?.includes('@'),
+      notPlaceholder: !emailToCheck?.includes('@wa.placeholder'),
+      hasDot: emailToCheck?.split('@')[1]?.includes('.')
+    });
 
     if (hasRealEmail) {
-      console.log('[Tool: bookAppointment] Sending confirmation email to:', contact.email);
+      console.log('[Tool: bookAppointment] Sending confirmation email to:', emailToCheck);
       try {
         await sendEmail({
-          to: contact.email,
+          to: emailToCheck,
           template: 'booking_confirmation',
           data: {
             company_name: companyName,
