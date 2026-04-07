@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Redis } from '@upstash/redis';
 
 export interface QueueMessage {
@@ -379,4 +378,5 @@ class RedisQueue {
 export const redisQueue = RedisQueue.getInstance();
 
 // Export QueueMessage type
+// @ts-ignore
 export type { QueueMessage };

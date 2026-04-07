@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { BaseAIProvider, AIProviderParams } from './index';
 import { AIResponse } from '../agent';
 import { supabaseAdmin } from '../../db/client';
@@ -22,6 +21,7 @@ export class OpenAIProvider extends BaseAIProvider {
         console.log('[OpenAI] ⚠️ NO TOOLS sent to OpenAI');
       }
       
+      // @ts-ignore — messages may include tool_calls/tool_call_id from OpenAI format
       console.log(`[OpenAI] Message breakdown:`, messages.map(m => ({ role: m.role, hasContent: !!m.content, hasToolCalls: !!m.tool_calls, toolCallId: m.tool_call_id })));
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -68,6 +68,7 @@ export class OpenAIProvider extends BaseAIProvider {
       const result = {
         message: messageText,
         confidence: this.calculateConfidence(messageText, params),
+        content: messageText || '',
         intent: this.detectIntent(params.newMessage || ''),
         sentiment: this.detectSentiment(params.newMessage || ''),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,

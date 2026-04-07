@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * In-App Calendar Service
  * Generates available slots from availability_settings,
@@ -184,6 +183,7 @@ export async function getAvailableSlots(
     if (date.getTime() > maxBookingTime) break;
 
     const dayName = DAY_NAMES[date.getDay()];
+// @ts-ignore
     const dayEnabled = settings[`${dayName}_enabled`];
     
     console.log(`\n[Day ${dayOffset + 1}] ${dayName.toUpperCase()} - ${date.toISOString().split('T')[0]}`);
@@ -193,7 +193,9 @@ export async function getAvailableSlots(
       continue;
     }
 
+// @ts-ignore
     const dayStartStr = settings[`${dayName}_start`] || '09:00';
+// @ts-ignore
     const dayEndStr = settings[`${dayName}_end`] || '17:00';
     const [startH, startM] = dayStartStr.split(':').map(Number);
     const [endH, endM] = dayEndStr.split(':').map(Number);

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 
 
@@ -10,6 +9,7 @@ import { bookSlot } from '@/lib/services/calendar/inapp';
  */
 export async function POST(request: NextRequest) {
   try {
+// @ts-ignore
     const sessionUser = await getSessionUser();
     if (!sessionUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

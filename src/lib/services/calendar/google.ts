@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Google Calendar Provider
  * Supports Google Workspace Calendar integration
@@ -55,7 +54,9 @@ export class GoogleCalendarProvider implements ICalendarProvider {
    */
   private async getAccessToken(config: CalendarConfig): Promise<string | null> {
     // If we have a valid access token, use it
+// @ts-ignore
     if (config.googleAccessToken) {
+// @ts-ignore
       return config.googleAccessToken;
     }
 
@@ -154,6 +155,7 @@ export class GoogleCalendarProvider implements ICalendarProvider {
   /**
    * Book appointment via Google Calendar
    */
+// @ts-ignore
   async bookAppointment(
     config: CalendarConfig,
     slotTime: string,
@@ -248,6 +250,7 @@ export class GoogleCalendarProvider implements ICalendarProvider {
 
       return {
         success: true,
+// @ts-ignore
         eventId: event.id,
         meetingLink,
         meetingTime: slotTime,
@@ -348,6 +351,7 @@ export class GoogleCalendarProvider implements ICalendarProvider {
     const currentDate = new Date(startDate);
     while (currentDate < endDate && slots.length < 20) {
       const dayName = dayNames[currentDate.getDay()];
+// @ts-ignore
       const dayHours = hours[dayName];
 
       if (dayHours && dayHours.open && dayHours.close) {
@@ -384,6 +388,7 @@ export class GoogleCalendarProvider implements ICalendarProvider {
           });
 
           if (!isConflict && slotStart > now) {
+// @ts-ignore
             slots.push({
               datetime: slotStart.toISOString(),
               formatted: this.formatDateTime(slotStart.toISOString(), timezone),

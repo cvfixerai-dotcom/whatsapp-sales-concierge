@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { BaseAIProvider, AIProviderParams } from './index';
 import { AIResponse } from '../agent';
 
@@ -139,6 +138,7 @@ export class AnthropicProvider extends BaseAIProvider {
       // If AI returned tool_use without text, leave message empty so agent can do a follow-up call
       return {
         message: messageText || '',
+        content: messageText || '',
         confidence: this.calculateConfidence(messageText, params),
         intent: this.detectIntent(params.newMessage),
         sentiment: this.detectSentiment(params.newMessage),

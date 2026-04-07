@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Calendar Settings API — Internal In-App Calendar Only
  * Calendly and Google Calendar integrations have been removed.

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 import { sendEmail } from '../ai/tools/send-email';
 import { twilioService } from '../services/twilio';

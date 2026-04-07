@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -142,8 +141,11 @@ export default function HandoffsPage() {
           table: 'conversations',
         },
         (payload) => {
+// @ts-ignore
           if (payload.new?.status === 'handoff-requested' ||
+// @ts-ignore
               payload.new?.status === 'human-handled' ||
+// @ts-ignore
               payload.new?.status === 'resolved') {
             fetchHandoffs();
           }

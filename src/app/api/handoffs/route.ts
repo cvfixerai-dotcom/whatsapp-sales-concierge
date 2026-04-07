@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Handoffs API
  * GET - List pending handoffs for tenant

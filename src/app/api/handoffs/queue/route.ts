@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 
 
@@ -71,8 +70,11 @@ export async function GET(request: NextRequest) {
       return {
         id: handoff.id,
         conversation_id: handoff.id,
+// @ts-ignore
         contact_name: handoff.contacts?.name || 'Unknown',
+// @ts-ignore
         contact_phone: handoff.contacts?.whatsapp_number || '',
+// @ts-ignore
         contact_email: handoff.contacts?.email || '',
         reason: handoff.handoff_reason || 'Handoff requested',
         severity: getSeverity(handoff.handoff_triggers || [], handoff.handoff_escalated),
@@ -81,6 +83,7 @@ export async function GET(request: NextRequest) {
         requested_at: requestedAt,
         claimed_at: claimedAt,
         claimed_by: handoff.handoff_claimed_by,
+// @ts-ignore
         claimed_by_name: handoff.claimed_user?.full_name || handoff.claimed_user?.email || null,
         resolved_at: resolvedAt,
         escalated: handoff.handoff_escalated || false,

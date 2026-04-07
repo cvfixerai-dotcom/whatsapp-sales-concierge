@@ -1,14 +1,12 @@
-// @ts-nocheck
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from './types';
 
 // Lazy-loaded Supabase clients to support CLI scripts with dotenv
-let _supabaseAdmin: SupabaseClient<Database> | null = null;
-let _supabaseClient: SupabaseClient<Database> | null = null;
+let _supabaseAdmin: SupabaseClient | null = null;
+let _supabaseClient: SupabaseClient | null = null;
 
-function getSupabaseAdmin(): SupabaseClient<Database> {
+function getSupabaseAdmin(): SupabaseClient {
   if (!_supabaseAdmin) {
-    _supabaseAdmin = createClient<Database>(
+    _supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
@@ -22,9 +20,9 @@ function getSupabaseAdmin(): SupabaseClient<Database> {
   return _supabaseAdmin;
 }
 
-function getSupabaseClient(): SupabaseClient<Database> {
+function getSupabaseClient(): SupabaseClient {
   if (!_supabaseClient) {
-    _supabaseClient = createClient<Database>(
+    _supabaseClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
@@ -33,13 +31,13 @@ function getSupabaseClient(): SupabaseClient<Database> {
 }
 
 // Export as getters for lazy initialization
-export const supabaseAdmin = new Proxy({} as SupabaseClient<Database>, {
+export const supabaseAdmin = new Proxy({} as SupabaseClient, {
   get(_, prop) {
     return (getSupabaseAdmin() as any)[prop];
   }
 });
 
-export const supabaseClient = new Proxy({} as SupabaseClient<Database>, {
+export const supabaseClient = new Proxy({} as SupabaseClient, {
   get(_, prop) {
     return (getSupabaseClient() as any)[prop];
   }
@@ -47,7 +45,7 @@ export const supabaseClient = new Proxy({} as SupabaseClient<Database>, {
 
 // Helper to create a client with tenant context
 export function createTenantClient(tenantId: string) {
-  return createClient<Database>(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {

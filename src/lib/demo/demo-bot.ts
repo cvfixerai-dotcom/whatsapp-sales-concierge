@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Demo Bot System
  * Handles demo conversations for potential customers to experience the AI

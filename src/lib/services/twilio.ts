@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'crypto';
 import { supabaseAdmin } from '../db/client';
 import { env } from '../env';
@@ -96,6 +95,54 @@ export class TwilioService {
         console.warn('Allowing request in development mode despite signature error');
         return true;
       }
+      return false;
+    }
+  }
+
+  /**
+   * 🔥 CRIT-4 FIX: Verify Twilio webhook signature using a specific auth token (tenant-specific)
+   */
+  verifyWebhookSignatureWithToken(
+    signature: string,
+    url: string,
+    params: Record<string, string>,
+    authToken: string
+  ): boolean {
+    if (!authToken) {
+      console.warn('No auth token provided for signature verification');
+      return false;
+    }
+
+    if (!signature) {
+      console.warn('No Twilio signature provided — rejecting in production');
+      if (process.env.NODE_ENV === 'development') return true;
+      return false;
+    }
+
+    try {
+      const sortedParams = Object.keys(params)
+        .sort()
+        .map(key => `${key}${params[key]}`)
+        .join('');
+      
+      const data = url + sortedParams;
+      const expectedSignature = crypto
+        .createHmac('sha1', authToken)
+        .update(data)
+        .digest('base64');
+
+      if (signature.length !== expectedSignature.length) {
+        console.error('Signature length mismatch (tenant-verified)');
+        return false;
+      }
+      
+      return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature)
+      );
+    } catch (error) {
+      console.error('Error verifying webhook signature with tenant token:', error);
+      if (process.env.NODE_ENV === 'development') return true;
       return false;
     }
   }
@@ -264,7 +311,7 @@ export class TwilioService {
     // Get tenant's Twilio credentials
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
-      .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
+      .select('twilio_account_sid, twilio_auth_token, twilio_phone_number, twilio_whatsapp_number')
       .eq('id', tenantId)
       .single();
 

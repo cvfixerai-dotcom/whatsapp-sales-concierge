@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Appointment Reminder CRON Endpoint
  * Sends reminders 2 hours and 30 minutes before appointments.

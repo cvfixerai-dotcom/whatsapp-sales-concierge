@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Email Notification Channel
  * Uses Resend to send handoff notification emails

@@ -1,4 +1,3 @@
-// @ts-nocheck
 export const PRICING = {
   tiers: {
     trial: {
@@ -86,10 +85,12 @@ export const PRICING = {
 };
 
 export function getPriceForTier(tier: string): number {
+// @ts-ignore
   return PRICING.tiers[tier]?.price || 299;
 }
 
 export function getConversationsForTier(tier: string): number {
+// @ts-ignore
   return PRICING.tiers[tier]?.conversations || 25;
 }
 
@@ -165,7 +166,9 @@ export function getTierUpgradePath(currentTier: string): {
   }
   
   const next = tiers[currentIndex + 1];
+// @ts-ignore
   const current = PRICING.tiers[currentTier];
+// @ts-ignore
   const nextPlan = PRICING.tiers[next];
   
   return {

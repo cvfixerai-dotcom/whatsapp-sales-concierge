@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { calculateLeadScore } from './calculate-score';
 import { scheduleFollowUps, cancelFollowUps } from '../../services/followup-scheduler';

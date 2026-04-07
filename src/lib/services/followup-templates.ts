@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 
 export async function createDefaultFollowUpSequences(tenantId: string, industry: string) {

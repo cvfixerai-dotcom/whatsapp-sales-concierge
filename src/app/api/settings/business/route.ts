@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Business Settings API — business_hours, services, faqs, qualification_questions
  * GET  - Fetch current business settings

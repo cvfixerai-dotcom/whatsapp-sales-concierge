@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { twilioService } from '../../services/twilio';
 import { redisQueue, QueueMessage } from '../redis';

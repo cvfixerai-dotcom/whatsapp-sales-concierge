@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Handoff Settings API
  * GET - Fetch current handoff notification settings

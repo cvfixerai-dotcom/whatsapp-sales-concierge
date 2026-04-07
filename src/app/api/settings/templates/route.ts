@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * WhatsApp Template Messages API
  * GET - Fetch current templates

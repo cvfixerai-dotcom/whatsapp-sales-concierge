@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 
 export interface RateLimitResult {
@@ -423,4 +422,5 @@ export class RateLimiter {
 export const rateLimiter = RateLimiter.getInstance();
 
 // Export types
+// @ts-ignore
 export type { RateLimitConfig };

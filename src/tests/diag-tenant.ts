@@ -1,4 +1,3 @@
-// @ts-nocheck
 import 'dotenv/config';
 import { supabaseAdmin } from '../lib/db/client';
 

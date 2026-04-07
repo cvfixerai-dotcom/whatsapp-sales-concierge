@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -103,6 +102,7 @@ export default function ConversationViewer() {
 
   useEffect(() => {
     isMountedRef.current = true;
+// @ts-ignore
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     } else if (status === 'authenticated' && conversationId) {

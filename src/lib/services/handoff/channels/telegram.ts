@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Telegram Notification Channel
  * Uses Telegram Bot API to send handoff notifications

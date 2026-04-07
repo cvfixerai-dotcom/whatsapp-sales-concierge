@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * AI Configuration Settings API
  * GET - Fetch current AI config

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Multi-Channel Handoff Service
  * Handles handoff notifications across Dashboard, Email, WhatsApp, and Telegram

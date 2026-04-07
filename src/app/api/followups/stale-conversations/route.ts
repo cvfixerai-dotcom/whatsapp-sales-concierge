@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 
@@ -131,9 +130,11 @@ async function handleCron(request: NextRequest) {
 
     for (const conv of (staleConversations || [])) {
       const contact = conv.contacts;
+// @ts-ignore
       const tz = conv.tenants?.timezone || 'UTC';
 
       // Skip if contact is already hot, booked, or lost
+// @ts-ignore
       if (['hot', 'booked', 'lost'].includes(contact?.temperature)) {
         skipped++;
         continue;
@@ -161,6 +162,7 @@ async function handleCron(request: NextRequest) {
 
       // Build and send nudge
       const nudgeMessage = buildNudgeMessage(contact, lastMsg.content);
+// @ts-ignore
       const ok = await sendWhatsApp(conv.tenant_id, contact?.whatsapp_number, nudgeMessage);
 
       if (ok) {
@@ -207,6 +209,7 @@ async function handleCron(request: NextRequest) {
       const contact = conv.contacts;
 
       // Only downgrade warm/new leads to cold (don't touch hot/booked)
+// @ts-ignore
       if (!contact || ['hot', 'booked', 'cold', 'lost'].includes(contact?.temperature)) {
         continue;
       }
@@ -228,10 +231,12 @@ async function handleCron(request: NextRequest) {
       await supabaseAdmin
         .from('contacts')
         .update({ temperature: 'cold', updated_at: now.toISOString() })
+// @ts-ignore
         .eq('id', contact.id);
 
       // Schedule follow-ups for the now-cold lead
       const { scheduleFollowUps } = await import('@/lib/services/followup-scheduler');
+// @ts-ignore
       await scheduleFollowUps(conv.tenant_id, contact.id, conv.id, 'cold');
 
       markedCold++;

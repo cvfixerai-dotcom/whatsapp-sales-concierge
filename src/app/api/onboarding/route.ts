@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Onboarding API
  * GET - Get current onboarding status
@@ -41,6 +40,8 @@ export async function GET(request: NextRequest) {
         twilio_account_sid,
         twilio_whatsapp_number,
         calendar_provider,
+        google_calendar_id,
+        google_refresh_token,
         handoff_settings
       `)
       .eq('id', sessionUser.tenantId)
@@ -101,6 +102,8 @@ export async function GET(request: NextRequest) {
         ai_fallback_message: tenant.ai_fallback_message,
         qualification_questions: tenant.qualification_questions,
         twilio_configured: !!(tenant.twilio_account_sid && tenant.twilio_whatsapp_number),
+        google_calendar_connected: !!(tenant.google_calendar_id && tenant.google_refresh_token),
+        google_calendar_id: tenant.google_calendar_id || null,
         handoff_settings: tenant.handoff_settings,
       },
     });

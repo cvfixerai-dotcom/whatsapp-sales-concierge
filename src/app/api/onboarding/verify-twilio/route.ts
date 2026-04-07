@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Twilio Verification API
  * POST - Verify Twilio credentials during onboarding

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/db/client';
@@ -9,6 +8,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // 1. Auth check
   // Get current pathname to avoid redirect loops
   const headersList = headers();
+// @ts-ignore
   const pathname = headersList.get('x-pathname') || '';
   const sessionUser = await getSessionUser();
   if (!sessionUser) redirect('/auth/login');

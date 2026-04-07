@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -83,6 +82,7 @@ export default function AvailabilitySettingsPage() {
   });
 
   useEffect(() => {
+// @ts-ignore
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     } else if (status === 'authenticated') {

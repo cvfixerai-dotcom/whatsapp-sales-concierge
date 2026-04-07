@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 
 function getNext930AM(tz: string): Date {

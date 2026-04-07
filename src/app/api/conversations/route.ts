@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -53,8 +52,11 @@ export async function GET(request: NextRequest) {
           status: conv.status || 'active',
           handoff_requested: conv.status === 'handoff-requested' || conv.status === 'human-handling',
           updated_at: conv.updated_at,
+// @ts-ignore
           contact_name: contact?.name || 'Unknown',
+// @ts-ignore
           contact_phone: contact?.whatsapp_number || '',
+// @ts-ignore
           contact_temperature: contact?.temperature || 'new',
           last_message: lastMsg?.content || 'No messages yet',
           last_message_time: lastMsg?.created_at || conv.updated_at,

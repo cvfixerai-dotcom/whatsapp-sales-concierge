@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 import { twilioService } from '../services/twilio';
 import { redisQueue } from '../queue/redis';
@@ -8,6 +7,7 @@ import { executeTool } from './tools';
 import { formatBookingConfirmation } from './booking-confirmation';
 import { checkHandoffTriggers, logHandoffTrigger } from '../handoff/detector';
 import { notifyHandoffRequest } from '../handoff/notifier';
+import * as Sentry from '@sentry/nextjs';
 
 export interface ProcessMessageParams {
   tenantId: string;
@@ -87,13 +87,25 @@ export class AIAgent {
       );
 
       // 2. Build AI prompt
-      const systemPrompt = await this.buildSystemPrompt(
+      const { prompt: systemPrompt, hasRecentBooking } = await this.buildSystemPrompt(
         context.tenant,
         context.contact,
         params.language,
         context.messages
       );
       const conversationHistory = this.formatHistory(context.messages);
+
+      // 🔥 CRIT-2 FIX: In post-booking state, remove calendar/booking tools
+      // This makes it physically impossible for the AI to re-offer slots
+      let tools = this.getAvailableTools(context.tenant);
+      if (hasRecentBooking) {
+        const blockedTools = ['check_calendar', 'book_appointment', 'cancel_appointment'];
+        tools = tools.filter((t: any) => {
+          const toolName = t.name || t.function?.name;
+          return !blockedTools.includes(toolName);
+        });
+        console.log('[AI Agent] 🔒 POST-BOOKING: Removed calendar/booking tools. Remaining:', tools.map((t: any) => t.name || t.function?.name).join(', '));
+      }
 
       // 3. Call AI with tools
       aiResponse = await this.callAI({
@@ -102,7 +114,7 @@ export class AIAgent {
         systemPrompt,
         messages: conversationHistory,
         newMessage: params.messageContent,
-        tools: this.getAvailableTools(context.tenant),
+        tools,
         language: params.language,
         tenant: context.tenant,
         contact: context.contact,
@@ -224,7 +236,7 @@ export class AIAgent {
           console.log(`[AI Agent] Tool results:`, aiResponse.toolCalls.map(tc => `${tc.name}: ${tc.result?.success ? 'success' : 'failed'}`).join(', '));
           
           // 🔥 FIX: Rebuild system prompt with FRESH contact data
-          const freshSystemPrompt = await this.buildSystemPrompt(
+          const { prompt: freshSystemPrompt } = await this.buildSystemPrompt(
             context.tenant,
             context.contact, // Now has fresh data from reload above
             params.language,
@@ -258,14 +270,14 @@ export class AIAgent {
 
           // 🔥 CRITICAL FIX: Pass updated history WITHOUT re-adding the user message
           // The user message is already in updatedHistory, so we pass empty string
-          // 🔥 CRITICAL FIX #2: Preserve tools array so AI can call tools again (e.g., check_calendar after booking fails)
+          // 🔥 CRIT-2 FIX: Use the same filtered `tools` variable (calendar/booking removed if post-booking)
           const followUpResponse = await this.callAI({
             provider: context.tenant.ai_provider,
             model: context.tenant.ai_model,
             systemPrompt: enrichedPrompt,
             messages: updatedHistory,
             newMessage: '', // Empty because user message is already in history
-            tools: this.getAvailableTools(context.tenant), // ✅ FIXED: Include tools so AI can retry
+            tools, // ✅ Uses filtered tools from CRIT-2 fix above
             language: params.language,
             tenant: context.tenant,
             contact: context.contact, // Fresh contact data
@@ -317,14 +329,14 @@ export class AIAgent {
             
             const secondEnrichedPrompt = enrichedPrompt + `\n\nADDITIONAL TOOL RESULTS:\n${secondToolResultsSummary}`;
             
-            // Make a second follow-up call - keep tools available for booking
+            // Make a second follow-up call - use filtered tools (CRIT-2 fix)
             const secondFollowUpResponse = await this.callAI({
               provider: context.tenant.ai_provider,
               model: context.tenant.ai_model,
               systemPrompt: secondEnrichedPrompt,
               messages: secondUpdatedHistory,
               newMessage: '',
-              tools: this.getAvailableTools(context.tenant), // Keep tools for potential booking
+              tools, // ✅ CRIT-2 FIX: Uses filtered tools (calendar/booking removed if post-booking)
               language: params.language,
               tenant: context.tenant,
               contact: context.contact,
@@ -447,6 +459,19 @@ export class AIAgent {
     } catch (error) {
       console.error('[AI Agent] Error processing message:', error);
       
+      // Capture error in Sentry with context
+      Sentry.captureException(error, {
+        tags: {
+          component: 'ai-agent',
+          tenantId: params.tenantId,
+        },
+        extra: {
+          contactId: params.contactId,
+          conversationId: params.conversationId,
+          messageContent: params.messageContent?.substring(0, 200),
+        },
+      });
+      
       // Send error message to user
       await this.sendErrorMessage(params, context || undefined);
       
@@ -519,7 +544,7 @@ export class AIAgent {
     contact: any,
     language: string,
     messages: any[]
-  ): Promise<string> {
+  ): Promise<{ prompt: string; hasRecentBooking: boolean }> {
     // Format conversation history
     const history = messages
       .slice(-5) // Last 5 messages for context
@@ -536,8 +561,8 @@ export class AIAgent {
       .limit(1)
       .maybeSingle();
 
-    const hasRecentBooking = recentBooking && 
-      new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000);
+    const hasRecentBooking = !!(recentBooking && 
+      new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000));
 
     console.log('[Agent] Recent booking check:', {
       hasRecentBooking,
@@ -577,7 +602,7 @@ If they decline email → Wish them well and stop.
 `;
     }
 
-    return systemPrompt;
+    return { prompt: systemPrompt, hasRecentBooking };
   }
 
   /**
@@ -586,6 +611,7 @@ If they decline email → Wish them well and stop.
   private formatHistory(messages: any[]): any[] {
     return messages
       .filter(m => m.sender_type !== 'system')
+      .filter(m => m.content && m.content.trim().length > 0) // 🔥 HIGH-5 FIX: Skip empty messages
       .map(m => ({
         role: m.sender_type === 'contact' ? 'user' : 'assistant',
         content: m.content,
@@ -665,20 +691,17 @@ If they decline email → Wish them well and stop.
       console.log('[AI Agent] Claude response received successfully');
       return response;
     } catch (error) {
-      console.error('[AI Agent] Claude API call failed:', error);
-      throw error;
+      // 🔥 MED-6 FIX: Return fallback instead of re-throwing (was unreachable code before)
+      console.error('[AI Agent] Claude API call failed, returning fallback response:', error);
+      const fallbackMessage = this.generateFallbackResponse(params.newMessage, params.language);
+      return {
+        message: fallbackMessage,
+        content: fallbackMessage,
+        confidence: 0.1,
+        intent: 'error',
+        sentiment: 'neutral',
+      };
     }
-
-    // --- Hard fallback: static response (only if Claude throws) ---
-    console.error('[AI Agent] AI provider failed');
-    const fallbackMessage = this.generateFallbackResponse(params.newMessage, params.language);
-    return {
-      message: fallbackMessage,
-      content: fallbackMessage,
-      confidence: 0.1,
-      intent: 'error',
-      sentiment: 'neutral',
-    };
   }
 
   /**
@@ -839,44 +862,6 @@ If they decline email → Wish them well and stop.
   }
 
   /**
-   * Detect if human handoff is needed
-   */
-  private detectHandoff(aiResponse: AIResponse, contact: any): HandoffDetection {
-    // Low confidence
-    if (aiResponse.confidence < 0.70) {
-      return { needed: true, reason: 'low_confidence', priority: 'medium' };
-    }
-
-    // High-value lead
-    if (contact.leadScore > 80 && contact.budget_range === 'high') {
-      return { needed: true, reason: 'high_value_lead', priority: 'high' };
-    }
-
-    // Keywords in message
-    const handoffKeywords = ['human', 'agent', 'person', 'manager', 'complaint', 'sue', 'lawyer'];
-    const messageLower = aiResponse.message.toLowerCase();
-    
-    for (const keyword of handoffKeywords) {
-      if (messageLower.includes(keyword)) {
-        return { needed: true, reason: 'keyword_trigger', priority: 'high' };
-      }
-    }
-
-    // Negative sentiment with complaint intent
-    if (aiResponse.sentiment === 'negative' && aiResponse.intent === 'complaint') {
-      return { needed: true, reason: 'escalation', priority: 'urgent' };
-    }
-
-    // Complex query (multiple questions)
-    const questionMarks = (aiResponse.message.match(/\?/g) || []).length;
-    if (questionMarks > 2) {
-      return { needed: true, reason: 'complex_query', priority: 'medium' };
-    }
-
-    return { needed: false };
-  }
-
-  /**
    * Request human handoff
    */
   private async requestHumanHandoff(
@@ -952,12 +937,12 @@ If they decline email → Wish them well and stop.
     const { score } = calculateLeadScore(tenant?.industry || 'other', responses);
     const newScore = Math.min(100, Math.max(0, score));
 
+    // 🔥 HIGH-2 FIX: Only update lead_score here.
+    // Do NOT overwrite qualification_status or timeline — those are set by update_lead tool calls.
     await supabaseAdmin
       .from('contacts')
       .update({
         lead_score: newScore,
-        qualification_status: newScore > 70 ? 'qualified' : 'unqualified',
-        timeline: qualificationData.timeline,
         updated_at: new Date().toISOString(),
       })
       .eq('id', contactId);
@@ -971,6 +956,19 @@ If they decline email → Wish them well and stop.
     qualificationData?: AIResponse['qualificationData']
   ): Promise<void> {
     if (!qualificationData) return;
+
+    // 🔥 CRIT-1 FIX: Check current temperature before overwriting
+    // If temperature is 'booked', it was set by book_appointment tool — NEVER overwrite it
+    const { data: currentContact } = await supabaseAdmin
+      .from('contacts')
+      .select('temperature')
+      .eq('id', contactId)
+      .single();
+
+    if (currentContact?.temperature === 'booked') {
+      console.log(`[AI Agent] ⏭️ Skipping temperature update — contact is already 'booked'`);
+      return;
+    }
 
     let temperature: string = 'cold';
     

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Google Calendar OAuth Callback
  * Handles token exchange after user grants consent

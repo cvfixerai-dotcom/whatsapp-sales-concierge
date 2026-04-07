@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Dashboard Notification Channel
  * Uses Supabase Realtime to push notifications to the dashboard

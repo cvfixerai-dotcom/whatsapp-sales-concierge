@@ -7,9 +7,16 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
+      // Index signature: tables not explicitly listed below resolve to any
+      [key: string]: {
+        Row: Record<string, any>
+        Insert: Record<string, any>
+        Update: Record<string, any>
+        Relationships?: any[]
+      }
       ai_prompts: {
         Row: {
           content: string
@@ -577,6 +584,12 @@ export interface Database {
       }
     }
     Views: {
+      [key: string]: {
+        Row: Record<string, any>
+        Insert?: never
+        Update?: never
+        Relationships?: any[]
+      }
       conversation_summary: {
         Row: {
           contact_name: string | null

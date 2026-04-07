@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 
 
@@ -52,8 +51,10 @@ export async function GET(request: NextRequest) {
 
       recentConversations.push({
         id: conv.id,
+// @ts-ignore
         contact_name: conv.contacts?.name || 'Unknown',
         last_message: msgs?.[0]?.content || 'No messages',
+// @ts-ignore
         temperature: conv.contacts?.temperature || 'new',
         created_at: conv.created_at,
       });

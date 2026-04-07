@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 import { PRICING, calculateOverageCost } from './pricing';
 import { sendEmail } from '../ai/tools/send-email';

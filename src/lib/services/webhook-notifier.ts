@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '@/lib/db/client';
 
 export type WebhookEventType =

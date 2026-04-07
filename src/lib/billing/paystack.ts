@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import { supabaseAdmin } from '../db/client';
 import { PRICING, getPriceForTier, getConversationsForTier } from './pricing';
@@ -191,11 +190,13 @@ export async function cancelSubscription(tenantId: string) {
   try {
     const tenant = await getTenant(tenantId);
     
+// @ts-ignore
     if (!tenant.paystack_subscription_code) {
       throw new Error('No active subscription found');
     }
     
     const response = await paystackClient.post('/subscription/disable', {
+// @ts-ignore
       code: tenant.paystack_subscription_code,
       token: process.env.PAYSTACK_SECRET_KEY
     });
@@ -210,6 +211,7 @@ export async function cancelSubscription(tenantId: string) {
     
     log('info', 'Subscription cancelled', { 
       tenant_id: tenantId,
+// @ts-ignore
       subscription_code: tenant.paystack_subscription_code 
     });
     
@@ -228,6 +230,7 @@ export async function updateSubscription(
     const tenant = await getTenant(tenantId);
     
     // Cancel current subscription
+// @ts-ignore
     if (tenant.paystack_subscription_code) {
       await cancelSubscription(tenantId);
     }

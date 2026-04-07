@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { config } from 'dotenv';
 config(); // Load .env file
 

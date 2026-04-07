@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../db/client';
 
 type LogLevel = 'info' | 'warning' | 'error' | 'debug';

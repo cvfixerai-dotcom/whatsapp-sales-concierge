@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { updateLead } from './update-lead';
 import { sendEmail } from './send-email';
@@ -173,6 +172,7 @@ export async function bookAppointment({
           minute: '2-digit',
           timeZone: tenant.timezone || 'UTC'
         })}. Please cancel it first if you'd like to reschedule.`,
+// @ts-ignore
         existing_booking: existingBooking
       };
     }
@@ -242,7 +242,9 @@ export async function bookAppointment({
         );
 
         if (googleResult.success) {
+// @ts-ignore
           googleEventId = googleResult.eventId;
+// @ts-ignore
           googleMeetLink = googleResult.meetingLink;
           console.log(`[Tool: bookAppointment] ✅ Google Calendar event created: ${googleEventId}`);
           
@@ -271,6 +273,7 @@ export async function bookAppointment({
       contactId,
       updates: {
         temperature: 'booked',
+// @ts-ignore
         qualification_status: 'contacted',
         metadata: {
           last_booking_at: new Date().toISOString(),

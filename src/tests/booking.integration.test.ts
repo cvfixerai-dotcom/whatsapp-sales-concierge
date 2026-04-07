@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Deterministic Integration Test — Booking Engine
  *

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { supabaseAdmin } from '../../db/client';
 import { getAvailableSlots, getAvailabilitySettings } from '../../services/calendar/inapp';
 import { GoogleCalendarProvider } from '../../services/calendar/google';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { formatInTimeZone } from 'date-fns-tz';
 
 /**

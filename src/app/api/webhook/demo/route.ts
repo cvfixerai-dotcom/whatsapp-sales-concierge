@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Demo Bot Webhook Handler
  * Handles incoming WhatsApp messages for the demo bot

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest } from 'next/server';
 import { verifyPaystackWebhook, verifyTransaction } from '@/lib/billing/paystack';
 import { addTopUpConversations } from '@/lib/billing/usage-tracker';

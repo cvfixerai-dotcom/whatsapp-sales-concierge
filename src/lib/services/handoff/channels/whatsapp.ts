@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * WhatsApp Notification Channel
  * Uses Twilio to send handoff notifications to business owner's WhatsApp

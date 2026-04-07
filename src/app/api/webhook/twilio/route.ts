@@ -1,10 +1,10 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { env } from '@/lib/env';
 import { twilioService } from '@/lib/services/twilio';
 import { aiAgent } from '@/lib/ai/agent';
 import { autoExtractAndSave, extractBudgetHints, extractTimelineHints } from '@/lib/ai/auto-extract';
+import * as Sentry from '@sentry/nextjs';
 
 const CONVERSATION_WINDOW_HOURS = 24;
 
@@ -30,22 +30,40 @@ export async function POST(request: NextRequest) {
 
     log(`Received: from=${fromNumber} to=${toNumber} body="${messageBody.substring(0, 50)}" sid=${messageSid}`);
 
-    // 2. Verify Twilio signature (use TWILIO_WEBHOOK_URL in production to avoid proxy mismatch)
-    const signature = request.headers.get('x-twilio-signature') || '';
-    const webhookUrl = env.TWILIO_WEBHOOK_URL || request.url;
-    const isValidSignature = twilioService.verifyWebhookSignature(signature, webhookUrl, webhookData);
-    if (!isValidSignature) {
-      logErr('Invalid Twilio signature');
-      return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 403 });
-    }
-    
-    // 3. Find tenant by WhatsApp number
+    // 2. Find tenant by WhatsApp number FIRST (need their auth token for signature verification)
     const tenantId = await twilioService.getTenantByWhatsAppNumber(toNumber);
     if (!tenantId) {
       logErr(`No tenant found for WhatsApp number: ${toNumber}`);
       return NextResponse.json({ ok: false, error: 'No tenant', logs }, { status: 200 });
     }
     log(`Tenant found: ${tenantId}`);
+
+    // 3. 🔥 CRIT-4 FIX: Verify Twilio signature using the TENANT's auth token (not the platform's)
+    const signature = request.headers.get('x-twilio-signature') || '';
+    const webhookUrl = env.TWILIO_WEBHOOK_URL || request.url;
+    const { data: tenantCreds } = await supabaseAdmin
+      .from('tenants')
+      .select('twilio_auth_token')
+      .eq('id', tenantId)
+      .single();
+    
+    if (tenantCreds?.twilio_auth_token) {
+      // Use tenant-specific auth token for signature verification
+      const isValidSignature = twilioService.verifyWebhookSignatureWithToken(
+        signature, webhookUrl, webhookData, tenantCreds.twilio_auth_token
+      );
+      if (!isValidSignature) {
+        logErr('Invalid Twilio signature (tenant-verified)');
+        return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 403 });
+      }
+    } else {
+      // Fallback to platform-level verification if tenant has no auth token stored
+      const isValidSignature = twilioService.verifyWebhookSignature(signature, webhookUrl, webhookData);
+      if (!isValidSignature) {
+        logErr('Invalid Twilio signature (platform-verified)');
+        return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 403 });
+      }
+    }
 
     // 3b. Trial & limit check
     const limitOk = await checkTenantLimits(tenantId, fromNumber, log);
@@ -281,6 +299,10 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     logErr('Unhandled error', error);
+    Sentry.captureException(error, {
+      tags: { component: 'twilio-webhook' },
+      extra: { logs },
+    });
     // Return 200 to prevent Twilio retries, but include debug info
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : 'Unknown error', logs },
