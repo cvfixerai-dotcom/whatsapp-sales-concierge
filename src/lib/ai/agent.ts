@@ -276,12 +276,23 @@ export class AIAgent {
           // 🔥 CRITICAL FIX: Pass updated history WITHOUT re-adding the user message
           // The user message is already in updatedHistory, so we pass empty string
           // 🔥 CRIT-2 FIX: Use the same filtered `tools` variable (calendar/booking removed if post-booking)
+          
+          // DEBUG: Log the exact messages being sent
+          console.log('[Debug] Follow-up messages:', JSON.stringify(updatedHistory, null, 2));
+          
+          // 🔥 CRITICAL FIX: Add explicit user message asking Claude to respond
+          // Claude needs a user message at the end to know it should respond
+          const followUpMessages = [
+            ...updatedHistory,
+            { role: 'user', content: 'Based on the tool results above, respond to the customer naturally and continue the conversation.' }
+          ];
+          
           const followUpResponse = await this.callAI({
             provider: context.tenant.ai_provider,
             model: context.tenant.ai_model,
             systemPrompt: enrichedPrompt,
-            messages: updatedHistory,
-            newMessage: '', // Empty because user message is already in history
+            messages: followUpMessages,
+            newMessage: '', // Messages already include the prompt above
             tools, // ✅ Uses filtered tools from CRIT-2 fix above
             language: params.language,
             tenant: context.tenant,
@@ -334,13 +345,19 @@ export class AIAgent {
             
             const secondEnrichedPrompt = enrichedPrompt + `\n\nADDITIONAL TOOL RESULTS:\n${secondToolResultsSummary}`;
             
+            // 🔥 CRITICAL FIX: Add explicit user message for second follow-up too
+            const secondFollowUpMessages = [
+              ...secondUpdatedHistory,
+              { role: 'user', content: 'Based on the additional tool results above, respond to the customer naturally and continue the conversation.' }
+            ];
+            
             // Make a second follow-up call - use filtered tools (CRIT-2 fix)
             const secondFollowUpResponse = await this.callAI({
               provider: context.tenant.ai_provider,
               model: context.tenant.ai_model,
               systemPrompt: secondEnrichedPrompt,
-              messages: secondUpdatedHistory,
-              newMessage: '',
+              messages: secondFollowUpMessages,
+              newMessage: '', // Messages already include the prompt above
               tools, // ✅ CRIT-2 FIX: Uses filtered tools (calendar/booking removed if post-booking)
               language: params.language,
               tenant: context.tenant,
