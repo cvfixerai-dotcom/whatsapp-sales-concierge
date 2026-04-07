@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client';
 import { calculateLeadScore } from './calculate-score';
 import { scheduleFollowUps, cancelFollowUps } from '../../services/followup-scheduler';
+import { sendEmail } from './send-email';
 
 interface UpdateLeadParams {
   contactId: string;
@@ -154,6 +155,49 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
     }
 
     console.log(`[Tool: updateLead] ✅ COMPLETED - Contact updated successfully. New score: ${newScore}/100`);
+
+    // 🔥 CRITICAL FIX: Send confirmation email if email was just added and contact has a recent booking
+    if (updates.email && !existingContact.email && updatedContact.temperature === 'booked') {
+      console.log('[Tool: updateLead] Email was just collected for a booked contact - sending confirmation email');
+      
+      // Get the most recent appointment for this contact
+      const { data: recentAppointment } = await supabaseAdmin
+        .from('appointments')
+        .select('*')
+        .eq('contact_id', contactId)
+        .eq('status', 'scheduled')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (recentAppointment) {
+        // Get tenant info for the email
+        const { data: tenant } = await supabaseAdmin
+          .from('tenants')
+          .select('company_name, timezone')
+          .eq('id', existingContact.tenant_id)
+          .single();
+        
+        try {
+          await sendEmail({
+            to: updates.email,
+            template: 'booking_confirmation',
+            data: {
+              company_name: tenant?.company_name || 'Our Company',
+              meeting_time: recentAppointment.scheduled_time,
+              meeting_link: recentAppointment.meeting_link || 'Details will be shared before the meeting',
+              customer_name: updatedContact.name || 'Customer',
+            },
+          });
+          console.log('[Tool: updateLead] ✅ Confirmation email sent to:', updates.email);
+        } catch (emailError) {
+          console.error('[Tool: updateLead] Failed to send confirmation email:', emailError);
+          // Don't fail the update if email fails
+        }
+      } else {
+        console.log('[Tool: updateLead] No recent appointment found - skipping confirmation email');
+      }
+    }
 
     // Handle follow-up scheduling based on temperature change
     if (updates.temperature) {

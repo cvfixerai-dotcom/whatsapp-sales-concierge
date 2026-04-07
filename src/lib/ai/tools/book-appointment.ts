@@ -305,16 +305,20 @@ export async function bookAppointment({
 
     // 7. Send confirmation email (non-fatal) - only if we have a real email
     // Use the FRESH contact data, not the potentially stale 'contact' variable
+    // 🔥 CRITICAL FIX: Strict validation - NEVER send to placeholder emails
     const emailToCheck = freshContact?.email || contact.email;
-    const hasRealEmail = emailToCheck && 
-      emailToCheck.includes('@') && 
-      !emailToCheck.includes('@wa.placeholder') &&
-      !emailToCheck.includes('@placeholder') &&
-      emailToCheck.split('@')[1]?.includes('.');
+    const isPlaceholder = !emailToCheck || 
+      emailToCheck.includes('@wa.placeholder') ||
+      emailToCheck.includes('@placeholder') ||
+      !emailToCheck.includes('@') ||
+      !emailToCheck.split('@')[1]?.includes('.');
+    
+    const hasRealEmail = !isPlaceholder;
 
     console.log('[bookAppointment] Email validation result:', { 
       emailToCheck, 
       hasRealEmail,
+      isPlaceholder,
       includesAt: emailToCheck?.includes('@'),
       notPlaceholder: !emailToCheck?.includes('@wa.placeholder'),
       hasDot: emailToCheck?.split('@')[1]?.includes('.')
