@@ -50,6 +50,30 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       timeline: existingContact.timeline,
     });
 
+    // Validate name - reject locations/property types being saved as names
+    if (updates.name) {
+      const invalidNamePatterns = [
+        'marina', 'downtown', 'jlt', 'palm', 'jumeirah', 'dubai', 'abu dhabi',
+        'apartment', 'villa', 'studio', 'office', 'townhouse', 'penthouse',
+        '1br', '2br', '3br', '4br', '5br', '1 bedroom', '2 bedroom', '3 bedroom',
+        'bedroom', 'bhk', 'flat', 'house', 'building', 'tower', 'complex',
+        'area', 'location', 'community', 'district', 'zone'
+      ];
+      const nameLower = updates.name.toLowerCase().trim();
+      const isInvalidName = invalidNamePatterns.some(pattern => 
+        nameLower === pattern || nameLower.includes(pattern)
+      );
+      
+      if (isInvalidName) {
+        console.warn(`[Tool: updateLead] 🚨 REJECTED invalid name: "${updates.name}"`);
+        console.warn('[Tool: updateLead] This looks like a location/property type, not a person name');
+        // Remove the name from updates to prevent saving it
+        delete updates.name;
+      } else {
+        console.log(`[Tool: updateLead] ✅ Name validated: "${updates.name}"`);
+      }
+    }
+
     // Prepare update data - merge metadata with existing to preserve calendar_last_slots etc.
     const updateData: any = {
       ...updates,

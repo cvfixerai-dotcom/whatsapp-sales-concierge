@@ -881,7 +881,7 @@ export default function ConversationViewer() {
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  checked={!!appointment}
+                  checked={!!appointment || contact.temperature === 'booked'}
                   readOnly
                   className="rounded text-blue-600"
                 />
