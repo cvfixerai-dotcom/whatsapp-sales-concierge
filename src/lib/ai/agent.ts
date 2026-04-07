@@ -3,6 +3,8 @@ import { twilioService } from '../services/twilio';
 import { redisQueue } from '../queue/redis';
 import { getAIProvider } from './providers';
 import { buildSystemPrompt, getQualificationCriteria, calculateLeadScore } from './prompts';
+import { buildSimplifiedPrompt } from './prompt-simple';
+import { determineConversationState, ConversationState } from './state-manager';
 import { executeTool } from './tools';
 import { formatBookingConfirmation } from './booking-confirmation';
 import { checkHandoffTriggers, logHandoffTrigger } from '../handoff/detector';
@@ -86,8 +88,8 @@ export class AIAgent {
         params.conversationId
       );
 
-      // 2. Build AI prompt
-      const { prompt: systemPrompt, hasRecentBooking } = await this.buildSystemPrompt(
+      // 2. Build AI prompt with state management
+      const { prompt: systemPrompt, hasRecentBooking, state } = await this.buildSystemPrompt(
         context.tenant,
         context.contact,
         params.language,
@@ -98,7 +100,7 @@ export class AIAgent {
       // 🔥 CRIT-2 FIX: In post-booking state, remove calendar/booking tools
       // This makes it physically impossible for the AI to re-offer slots
       let tools = this.getAvailableTools(context.tenant);
-      if (hasRecentBooking) {
+      if (hasRecentBooking || state === 'post_booking' || state === 'email_collected') {
         const blockedTools = ['check_calendar', 'book_appointment', 'cancel_appointment'];
         tools = tools.filter((t: any) => {
           const toolName = t.name || t.function?.name;
@@ -106,6 +108,9 @@ export class AIAgent {
         });
         console.log('[AI Agent] 🔒 POST-BOOKING: Removed calendar/booking tools. Remaining:', tools.map((t: any) => t.name || t.function?.name).join(', '));
       }
+
+      // Track tool calls for state management
+      const executedToolCalls: any[] = [];
 
       // 3. Call AI with tools
       aiResponse = await this.callAI({
@@ -537,17 +542,18 @@ export class AIAgent {
   }
 
   /**
-   * Build system prompt for AI
+   * Build system prompt for AI - using simplified state-managed approach
    */
   private async buildSystemPrompt(
     tenant: any,
     contact: any,
     language: string,
-    messages: any[]
-  ): Promise<{ prompt: string; hasRecentBooking: boolean }> {
-    // Format conversation history
+    messages: any[],
+    lastToolCalls: any[] = []
+  ): Promise<{ prompt: string; hasRecentBooking: boolean; state: ConversationState }> {
+    // Format conversation history (last 5 messages)
     const history = messages
-      .slice(-5) // Last 5 messages for context
+      .slice(-5)
       .map(m => `${m.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m.content}`)
       .join('\n');
 
@@ -564,45 +570,39 @@ export class AIAgent {
     const hasRecentBooking = !!(recentBooking && 
       new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000));
 
-    console.log('[Agent] Recent booking check:', {
+    // Determine conversation state
+    const stateResult = determineConversationState(
+      messages.length,
+      contact,
+      lastToolCalls,
+      hasRecentBooking
+    );
+
+    console.log('[Agent] State determined:', {
+      state: stateResult.state,
+      context: stateResult.context,
+      allowedTools: stateResult.allowedTools,
+      messageCount: messages.length,
       hasRecentBooking,
-      recentBookingId: recentBooking?.id,
-      recentBookingTime: recentBooking?.created_at,
-      windowCheck: recentBooking ? 
-        new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000) : false,
-      currentTime: new Date().toISOString(),
-      windowCutoff: new Date(Date.now() - 30 * 60 * 1000).toISOString()
+      contactName: contact?.name,
+      contactEmail: contact?.email,
     });
 
-    // Build base system prompt
-    let systemPrompt = buildSystemPrompt(tenant, contact, language, history);
+    // Build simplified system prompt with state addendum
+    const systemPrompt = buildSimplifiedPrompt(
+      tenant.company_name || 'Our Company',
+      tenant.ai_assistant_name || 'Assistant',
+      tenant.industry || 'other',
+      stateResult.promptAddendum,
+      contact,
+      history
+    );
 
-    // Inject POST-BOOKING STATE if booking was just made
-    if (hasRecentBooking) {
-      const bookingTime = new Date(recentBooking.scheduled_time).toLocaleString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: tenant.timezone || 'UTC',
-      });
-
-      console.log('[Agent] 🚨 POST-BOOKING STATE ACTIVE - Injecting warning into system prompt');
-
-      systemPrompt += `
-
-⚠️⚠️⚠️ POST-BOOKING STATE ACTIVE ⚠️⚠️⚠️
-The customer just booked an appointment for ${bookingTime}.
-Do NOT offer more slots. Do NOT call check_calendar. Do NOT restart qualification.
-Your ONLY task: Ask for their email address to send confirmation.
-If they say "thanks", "ok", "great", etc. → Ask: "To send you a confirmation, what's your email address?"
-If they decline email → Wish them well and stop.
-⚠️⚠️⚠️ POST-BOOKING STATE ACTIVE ⚠️⚠️⚠️
-`;
-    }
-
-    return { prompt: systemPrompt, hasRecentBooking };
+    return { 
+      prompt: systemPrompt, 
+      hasRecentBooking,
+      state: stateResult.state
+    };
   }
 
   /**

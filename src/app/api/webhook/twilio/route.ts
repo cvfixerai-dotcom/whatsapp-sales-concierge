@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { twilioService } from '@/lib/services/twilio';
 import { aiAgent } from '@/lib/ai/agent';
 import { autoExtractAndSave, extractBudgetHints, extractTimelineHints } from '@/lib/ai/auto-extract';
+import { getFirstGreeting } from '@/lib/ai/prompt-simple';
 import * as Sentry from '@sentry/nextjs';
 
 const CONVERSATION_WINDOW_HOURS = 24;
@@ -253,15 +254,58 @@ export async function POST(request: NextRequest) {
       // 10. Process AI response inline (no Redis dependency)
       log('Starting AI processing...');
       try {
-        const language = contact.language || 'en';
-        await aiAgent.processInboundMessage({
-          tenantId,
-          contactId: contact.id,
-          conversationId: conversation.id,
-          messageContent: messageBody,
-          language,
-        });
-        log('AI response sent successfully');
+        // 🔥 CRITICAL: Check if this is the FIRST message in a new conversation
+        // If so, send the tenant's custom greeting DIRECTLY without involving AI
+        const isFirstMessage = conversation.message_count <= 1;
+        
+        if (isFirstMessage) {
+          log('🎯 FIRST MESSAGE: Sending tenant greeting directly (no AI)');
+          
+          // Get tenant's custom greeting settings
+          const { data: tenantGreeting } = await supabaseAdmin
+            .from('tenants')
+            .select('ai_greeting, ai_assistant_name, company_name')
+            .eq('id', tenantId)
+            .single();
+          
+          const greetingMessage = getFirstGreeting(
+            tenantGreeting?.ai_greeting,
+            tenantGreeting?.company_name || 'Our Company',
+            tenantGreeting?.ai_assistant_name || 'Assistant'
+          );
+          
+          // Save the greeting as an AI message
+          await supabaseAdmin.from('messages').insert({
+            conversation_id: conversation.id,
+            tenant_id: tenantId,
+            direction: 'outbound',
+            sender_type: 'ai',
+            content: greetingMessage,
+            ai_confidence: 1.0,
+            metadata: { auto_greeting: true },
+            created_at: new Date().toISOString(),
+          });
+          
+          // Send via Twilio
+          await twilioService.sendWhatsAppMessage(
+            tenantId,
+            contact.whatsapp_number,
+            greetingMessage
+          );
+          
+          log('✅ Auto-greeting sent successfully');
+        } else {
+          // Not first message - use AI agent
+          const language = contact.language || 'en';
+          await aiAgent.processInboundMessage({
+            tenantId,
+            contactId: contact.id,
+            conversationId: conversation.id,
+            messageContent: messageBody,
+            language,
+          });
+          log('AI response sent successfully');
+        }
       } catch (aiErr) {
         logErr('AI processing failed', aiErr);
         // Send fallback message so customer isn't left hanging
