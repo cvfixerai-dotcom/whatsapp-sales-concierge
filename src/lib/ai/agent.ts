@@ -551,58 +551,96 @@ export class AIAgent {
     messages: any[],
     lastToolCalls: any[] = []
   ): Promise<{ prompt: string; hasRecentBooking: boolean; state: ConversationState }> {
-    // Format conversation history (last 5 messages)
-    const history = messages
-      .slice(-5)
-      .map(m => `${m.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m.content}`)
-      .join('\n');
+    try {
+      // Defensive checks
+      if (!contact) {
+        console.error('[Agent] CRITICAL: contact is null/undefined');
+        throw new Error('Contact is required');
+      }
+      if (!contact.id) {
+        console.error('[Agent] CRITICAL: contact.id is missing', contact);
+        throw new Error('Contact ID is required');
+      }
 
-    // Check if there's a recent booking (within last 30 minutes)
-    const { data: recentBooking } = await supabaseAdmin
-      .from('appointments')
-      .select('id, scheduled_time, customer_name, status, created_at')
-      .eq('contact_id', contact.id)
-      .eq('status', 'scheduled')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      // Format conversation history (last 5 messages)
+      const history = messages
+        ?.slice(-5)
+        ?.map(m => `${m?.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m?.content || ''}`)
+        ?.join('\n') || '';
 
-    const hasRecentBooking = !!(recentBooking && 
-      new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000));
+      // Check if there's a recent booking (within last 30 minutes)
+      const { data: recentBooking } = await supabaseAdmin
+        .from('appointments')
+        .select('id, scheduled_time, customer_name, status, created_at')
+        .eq('contact_id', contact.id)
+        .eq('status', 'scheduled')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    // Determine conversation state
-    const stateResult = determineConversationState(
-      messages.length,
-      contact,
-      lastToolCalls,
-      hasRecentBooking
-    );
+      const hasRecentBooking = !!(recentBooking && 
+        new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000));
 
-    console.log('[Agent] State determined:', {
-      state: stateResult.state,
-      context: stateResult.context,
-      allowedTools: stateResult.allowedTools,
-      messageCount: messages.length,
-      hasRecentBooking,
-      contactName: contact?.name,
-      contactEmail: contact?.email,
-    });
+      // Determine conversation state with error handling
+      let stateResult;
+      try {
+        stateResult = determineConversationState(
+          messages?.length || 0,
+          contact,
+          lastToolCalls || [],
+          hasRecentBooking
+        );
+        console.log('[Agent] State determined:', {
+          state: stateResult?.state,
+          context: stateResult?.context,
+          messageCount: messages?.length,
+          hasRecentBooking,
+          contactName: contact?.name,
+          contactEmail: contact?.email,
+        });
+      } catch (stateError) {
+        console.error('[Agent] State manager error:', stateError);
+        // Fall back to default state
+        stateResult = {
+          state: 'general_chat' as ConversationState,
+          context: 'ERROR FALLBACK: Default state due to state manager error',
+          allowedTools: ['update_lead', 'check_calendar'],
+          blockedTools: [],
+          promptAddendum: 'Start by asking what they are looking for.',
+        };
+      }
 
-    // Build simplified system prompt with state addendum
-    const systemPrompt = buildSimplifiedPrompt(
-      tenant.company_name || 'Our Company',
-      tenant.ai_assistant_name || 'Assistant',
-      tenant.industry || 'other',
-      stateResult.promptAddendum,
-      contact,
-      history
-    );
+      // Build simplified system prompt with error handling
+      let systemPrompt;
+      try {
+        systemPrompt = buildSimplifiedPrompt(
+          tenant?.company_name || 'Our Company',
+          tenant?.ai_assistant_name || 'Assistant',
+          tenant?.industry || 'other',
+          stateResult?.promptAddendum || '',
+          contact,
+          history
+        );
+      } catch (promptError) {
+        console.error('[Agent] Prompt builder error:', promptError);
+        // Fall back to minimal prompt
+        systemPrompt = `You are a helpful assistant from ${tenant?.company_name || 'Our Company'}. Be warm and professional. Ask what the customer is looking for.`;
+      }
 
-    return { 
-      prompt: systemPrompt, 
-      hasRecentBooking,
-      state: stateResult.state
-    };
+      return { 
+        prompt: systemPrompt, 
+        hasRecentBooking,
+        state: stateResult?.state || 'general_chat'
+      };
+    } catch (error) {
+      console.error('[Agent] buildSystemPrompt error:', error);
+      // Return safe fallback that won't crash
+      return {
+        prompt: `You are a helpful assistant. Be warm and professional. Ask what the customer is looking for.`,
+        hasRecentBooking: false,
+        state: 'general_chat'
+      };
+    }
   }
 
   /**

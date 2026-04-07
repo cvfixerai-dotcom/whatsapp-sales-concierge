@@ -29,6 +29,12 @@ export function determineConversationState(
   lastToolCalls: any[],
   hasRecentBooking: boolean
 ): StateCheckResult {
+  // Defensive checks
+  if (!contact || typeof contact !== 'object') {
+    console.error('[StateManager] contact is null/undefined, using defaults');
+    contact = {};
+  }
+  
   const name = contact?.name;
   const email = contact?.email;
   const budget = contact?.budget_range;
@@ -37,7 +43,7 @@ export function determineConversationState(
   const serviceInterest = contact?.service_interest;
 
   // STATE 1: First message - greeting should be handled by code, not AI
-  if (messageCount === 1) {
+  if (messageCount <= 1) {
     return {
       state: 'first_greeting',
       context: 'FIRST_MESSAGE: Send the tenant\'s custom greeting directly. Do not ask for name yet.',
