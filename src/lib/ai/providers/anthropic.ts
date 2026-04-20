@@ -103,7 +103,10 @@ export class AnthropicProvider extends BaseAIProvider {
           model: this.model,
           max_tokens: params.maxTokens || 1000,
           temperature: params.temperature || 0.7,
-          messages: messages.slice(1), // Exclude system message
+          // 🔥 FIX: formatMessages already skips system messages; they are passed separately
+          // via the `system` field below. The previous slice(1) incorrectly dropped the
+          // first user message, causing lost context on the opening turn.
+          messages,
           system: params.systemPrompt + toolEnforcementInstruction,
           ...(params.tools && params.tools.length > 0 ? { tools: params.tools, tool_choice: { type: 'auto' } } : {}),
         }),

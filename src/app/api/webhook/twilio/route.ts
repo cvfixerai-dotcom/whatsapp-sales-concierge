@@ -247,8 +247,13 @@ export async function POST(request: NextRequest) {
 
     log('Message saved, checking conversation status...');
 
-    // 9. Skip AI if a human agent has taken over
-    if (conversation.status === 'human-handling' || conversation.status === 'human-handled') {
+    // 9. Skip AI if a human agent has taken over OR handoff has been requested
+    // 🔥 HANDOFF FIX: 'handoff-requested' blocks AI until an agent claims the conversation
+    if (
+      conversation.status === 'human-handling' ||
+      conversation.status === 'human-handled' ||
+      conversation.status === 'handoff-requested'
+    ) {
       log(`Conversation is ${conversation.status} — skipping AI, message saved for human agent`);
     } else {
       // 10. Process AI response inline (no Redis dependency)

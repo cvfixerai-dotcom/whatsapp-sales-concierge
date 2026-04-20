@@ -409,7 +409,19 @@ export class AIAgent {
           await logHandoffTrigger(params.conversationId, trigger, aiResponse);
         }
 
-        // Send handoff notification
+        // 🔥 HANDOFF FIX: Mark contact as needing human attention
+        // Ensures dashboards, follow-up schedulers, and reports see the escalation
+        try {
+          await supabaseAdmin
+            .from('contacts')
+            .update({ needs_human: true, updated_at: new Date().toISOString() })
+            .eq('id', params.contactId);
+          console.log('[AI Agent] ✅ Contact flagged as needs_human');
+        } catch (flagErr) {
+          console.error('[AI Agent] Failed to set needs_human on contact:', flagErr);
+        }
+
+        // Send handoff notification (also sets conversation.status = 'handoff-requested')
         const severity = handoffResult.triggers.some(t => t.severity === 'high') ? 'high' : 'medium';
         await notifyHandoffRequest(
           params.conversationId,

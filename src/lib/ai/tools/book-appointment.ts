@@ -150,31 +150,61 @@ export async function bookAppointment({
     const inviteeName = contact.name || 'Customer';
     const companyName = tenant.company_name || 'Our Team';
 
-    // 4. Check for existing bookings to prevent double booking
-    const { data: existingBooking } = await supabaseAdmin
-      .from('appointments')
-      .select('id, scheduled_time, status')
-      .eq('contact_id', contactId)
-      .eq('status', 'scheduled')
-      .gte('scheduled_time', new Date().toISOString())
-      .lte('scheduled_time', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString())
-      .maybeSingle();
+    // 4. Two-tier conflict check BEFORE booking:
+    //    (a) Tenant-wide slot collision — prevents double-booking the calendar across contacts
+    //    (b) Same-contact same-slot rebook — idempotent success
+    //    (c) Same-contact different-slot rebook — cancel prior, proceed with new
+    console.log('[Tool: book_appointment] Checking for slot conflicts at', resolvedIso);
 
-    if (existingBooking) {
-      console.log('[bookAppointment] ⚠️ Contact already has booking:', existingBooking.id);
+    const { data: conflictingBookings, error: conflictErr } = await supabaseAdmin
+      .from('appointments')
+      .select('id, scheduled_time, status, contact_id')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'scheduled')
+      .eq('scheduled_time', resolvedIso); // exact ISO match (UTC)
+
+    if (conflictErr) {
+      console.error('[Tool: book_appointment] Conflict check query failed:', conflictErr);
+      return { success: false, error: 'Unable to verify slot availability. Please try again.' };
+    }
+
+    if (conflictingBookings && conflictingBookings.length > 0) {
+      // (b) Same contact already holds this exact slot — idempotent success
+      const sameContactBooking = conflictingBookings.find(b => b.contact_id === contactId);
+      if (sameContactBooking) {
+        console.log('[Tool: book_appointment] ✅ Contact already holds this exact slot — idempotent success:', sameContactBooking.id);
+        return { success: true, confirmed_iso: resolvedIso };
+      }
+      // (a) Different contact holds this slot — reject
+      console.log('[Tool: book_appointment] ⚠️ Slot collision — taken by another contact');
       return {
         success: false,
-        error: `You already have a booking scheduled for ${new Date(existingBooking.scheduled_time).toLocaleString('en-US', { 
-          weekday: 'long', 
-          month: 'long', 
-          day: 'numeric', 
-          hour: 'numeric', 
-          minute: '2-digit',
-          timeZone: tenant.timezone || 'UTC'
-        })}. Please cancel it first if you'd like to reschedule.`,
-// @ts-ignore
-        existing_booking: existingBooking
+        error: 'That time slot was just booked by someone else. Please call check_calendar again to see the latest availability.',
       };
+    }
+
+    // (c) Slot is free — cancel any prior pending bookings for this contact so rebooking works
+    const { data: otherContactBookings } = await supabaseAdmin
+      .from('appointments')
+      .select('id, scheduled_time')
+      .eq('contact_id', contactId)
+      .eq('status', 'scheduled')
+      .gte('scheduled_time', new Date().toISOString());
+
+    if (otherContactBookings && otherContactBookings.length > 0) {
+      console.log(`[Tool: book_appointment] Contact has ${otherContactBookings.length} existing booking(s) — cancelling to allow rebook`);
+      const { error: cancelErr } = await supabaseAdmin
+        .from('appointments')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('contact_id', contactId)
+        .eq('status', 'scheduled')
+        .gte('scheduled_time', new Date().toISOString());
+
+      if (cancelErr) {
+        console.error('[Tool: book_appointment] Failed to cancel prior booking:', cancelErr);
+        return { success: false, error: 'Unable to reschedule your existing booking. Please try again.' };
+      }
+      console.log('[Tool: book_appointment] ✅ Prior booking(s) cancelled');
     }
 
     // 5. Book the slot
