@@ -6,9 +6,8 @@ import DashboardShell from './DashboardShell';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // 1. Auth check
-  // Get current pathname to avoid redirect loops
-  const headersList = headers();
-// @ts-ignore
+  // Next.js 15: headers() is async and must be awaited
+  const headersList = await headers();
   const pathname = headersList.get('x-pathname') || '';
   const sessionUser = await getSessionUser();
   if (!sessionUser) redirect('/auth/login');
@@ -38,9 +37,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
       // B2: trial conversation limit reached
       const trialLimit = tenant.trial_conversation_limit || 25;
+      // Use trial_start_date as lower bound; fallback to 30 days ago (never epoch)
       const trialStart = tenant.trial_start_date
         ? new Date(tenant.trial_start_date).toISOString()
-        : new Date(0).toISOString();
+        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { count: trialUsed } = await supabaseAdmin
         .from('conversations')
         .select('id', { count: 'exact', head: true })

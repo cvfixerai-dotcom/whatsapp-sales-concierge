@@ -324,19 +324,78 @@ export function verifyPaystackWebhook(signature: string, body: string): boolean 
   return hash === signature;
 }
 
-// Helper function to get tenant
+// Helper function to get tenant with owner email resolved from users table.
+// The tenants table now has owner_email as a column (added in migration),
+// but we also do a live JOIN as a fallback in case it's not yet populated.
 async function getTenant(tenantId: string): Promise<Tenant> {
   const { data, error } = await supabaseAdmin
     .from('tenants')
     .select('*')
     .eq('id', tenantId)
     .single();
-  
+
   if (error || !data) {
     throw new Error('Tenant not found');
   }
-  
+
+  // Resolve owner_email: use stored value or look up from users table
+  if (!data.owner_email) {
+    const { data: owner } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('tenant_id', tenantId)
+      .eq('role', 'owner')
+      .maybeSingle();
+
+    if (owner?.email) {
+      // Cache it for next time
+      await supabaseAdmin
+        .from('tenants')
+        .update({ owner_email: owner.email })
+        .eq('id', tenantId);
+      data.owner_email = owner.email;
+    }
+  }
+
   return data;
+}
+
+/**
+ * Initialize a Paystack transaction for a subscription tier.
+ * The customer completes payment on Paystack's hosted page.
+ * On success, the charge.success webhook activates their subscription.
+ */
+export async function initializePaystackTransaction(tenantId: string, tier: string) {
+  try {
+    const tenant = await getTenant(tenantId);
+    const price = getPriceForTier(tier);
+
+    const response = await paystackClient.post('/transaction/initialize', {
+      email: tenant.owner_email,
+      amount: price * 100, // Paystack uses kobo/cents
+      currency: 'USD',
+      reference: `sub-${tier}-${tenantId}-${Date.now()}`,
+      callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing/callback`,
+      metadata: {
+        tenant_id: tenantId,
+        type: 'subscription',
+        tier,
+        description: `${tier} plan — ${getConversationsForTier(tier)} conversations/month`,
+      },
+    });
+
+    log('info', 'Subscription transaction initialized', {
+      tenant_id: tenantId,
+      tier,
+      amount: price,
+      reference: response.data.data.reference,
+    });
+
+    return response.data.data;
+  } catch (error) {
+    log('error', 'Failed to initialize subscription transaction', { tenantId, tier, error });
+    throw error;
+  }
 }
 
 // Export customer data for GDPR compliance

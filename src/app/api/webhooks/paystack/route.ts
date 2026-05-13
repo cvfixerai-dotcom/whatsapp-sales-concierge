@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
 
 async function handleSuccessfulCharge(data: any) {
   try {
-    const tenantId = data.metadata.tenant_id;
-    const type = data.metadata.type;
-    
+    const tenantId = data.metadata?.tenant_id;
+    const type = data.metadata?.type;
+
     if (!tenantId || !type) {
       log('error', 'Missing metadata in charge.success', { data });
       return;
@@ -71,7 +71,7 @@ async function handleSuccessfulCharge(data: any) {
       .insert({
         tenant_id: tenantId,
         paystack_reference: data.reference,
-        amount: data.amount / 100, // Convert from cents to dollars
+        amount: data.amount / 100,
         currency: data.currency || 'USD',
         type: type,
         status: 'success',
@@ -80,20 +80,76 @@ async function handleSuccessfulCharge(data: any) {
       });
 
     // Handle based on payment type
-    if (type === 'setup_fee') {
+    if (type === 'subscription') {
+      // ── CRITICAL: activate subscription after successful payment ──────────
+      await handleSubscriptionPayment(tenantId, data);
+    } else if (type === 'setup_fee') {
       await handleSetupFeePayment(tenantId, data);
     } else if (type === 'topup') {
       await handleTopUpPayment(tenantId, data);
     }
-    
-    log('info', 'Payment processed successfully', { 
-      tenant_id: tenantId, 
+
+    log('info', 'Payment processed successfully', {
+      tenant_id: tenantId,
       type,
       amount: data.amount / 100,
-      reference: data.reference 
+      reference: data.reference
     });
   } catch (error) {
     log('error', 'Failed to handle successful charge', { data, error });
+    throw error;
+  }
+}
+
+async function handleSubscriptionPayment(tenantId: string, data: any) {
+  try {
+    const tier = data.metadata?.tier;
+    if (!tier) {
+      log('error', 'Missing tier in subscription charge metadata', { tenantId, data });
+      return;
+    }
+
+    // Map tier → conversation limit (mirrors pricing.ts)
+    const convLimits: Record<string, number> = {
+      starter: 200,
+      growth: 800,
+      scale: 2500,
+    };
+
+    await supabaseAdmin
+      .from('tenants')
+      .update({
+        subscription_status: 'active',
+        subscription_tier: tier,
+        monthly_conversation_limit: convLimits[tier] ?? 200,
+        subscription_updated_at: new Date().toISOString(),
+      })
+      .eq('id', tenantId);
+
+    // Fetch tenant for confirmation email
+    const { data: tenant } = await supabaseAdmin
+      .from('tenants')
+      .select('owner_email, company_name')
+      .eq('id', tenantId)
+      .single();
+
+    if (tenant?.owner_email) {
+      await sendEmail({
+        to: tenant.owner_email,
+        template: 'subscription_started',
+        data: {
+          company_name: tenant.company_name,
+          plan: tier,
+          amount: data.amount / 100,
+          payment_reference: data.reference,
+          dashboard_link: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
+        },
+      }).catch(() => {}); // non-fatal
+    }
+
+    log('info', 'Subscription activated via charge.success', { tenantId, tier });
+  } catch (error) {
+    log('error', 'Failed to activate subscription after payment', { tenantId, error });
     throw error;
   }
 }

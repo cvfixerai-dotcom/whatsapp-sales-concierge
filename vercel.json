@@ -1,4 +1,18 @@
 {
+  "functions": {
+    "src/app/api/webhook/twilio/route.ts": {
+      "maxDuration": 10
+    },
+    "src/app/api/conversations/reply/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/followups/process/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/reminders/process/route.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/followups/process",
