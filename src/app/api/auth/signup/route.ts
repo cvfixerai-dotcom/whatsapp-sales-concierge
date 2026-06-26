@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { createClient } from '@supabase/supabase-js';
-import { initializeTenantDefaults, applyIndustryAgent } from '@/lib/services/tenant-initializer';
+import { provisionTenantForUser } from '@/lib/services/provision-tenant';
 
 const supabaseAuth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,79 +43,37 @@ export async function POST(request: NextRequest) {
 
     const authUserId = authData.user.id;
 
-    // Step 2: Create tenant
-    const trialStart = new Date();
-    const trialEnd = new Date(trialStart);
-    trialEnd.setDate(trialEnd.getDate() + 7);
-
-    const { data: tenant, error: tenantError } = await supabaseAdmin
-      .from('tenants')
-      .insert({
-        company_name: companyName.trim(),
-        owner_id: authUserId,
-        subscription_tier: 'trial',
-        subscription_status: 'trial',
-        trial_start_date: trialStart.toISOString(),
-        trial_end_date: trialEnd.toISOString(),
-        trial_conversation_limit: 25,
-        monthly_conversation_limit: 25,
-        ai_provider: 'anthropic',
-        ai_model: 'claude-sonnet-4-20250514',
-        business_hours: {},
-        setup_completed: false,
-      })
-      .select('id')
-      .single();
-
-    if (tenantError || !tenant) {
-      await supabaseAdmin.auth.admin.deleteUser(authUserId);
-      return NextResponse.json({ error: tenantError?.message ?? 'Failed to create tenant' }, { status: 500 });
-    }
-
-    // Step 3: Create public.users row (id = auth uid)
-    const { error: userError } = await supabaseAdmin
-      .from('users')
-      .insert({
-        id: authUserId,
-        tenant_id: tenant.id,
+    // Step 2 & 3: Create tenant + public.users row, seed defaults.
+    try {
+      await provisionTenantForUser({
+        authUserId,
         email: normalizedEmail,
-        password_hash: '',
-        full_name: fullName.trim(),
-        role: 'owner',
-        is_active: true,
+        fullName: fullName.trim(),
+        companyName: companyName.trim(),
       });
-
-    if (userError) {
-      await supabaseAdmin.from('tenants').delete().eq('id', tenant.id);
+    } catch (error) {
       await supabaseAdmin.auth.admin.deleteUser(authUserId);
-      return NextResponse.json({ error: 'Failed to create user record' }, { status: 500 });
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Failed to create account' },
+        { status: 500 }
+      );
     }
 
-    // Auto-initialize tenant with defaults after creation
-    try {
-      await initializeTenantDefaults(tenant.id, {
-        timezone: 'UTC', // Will be updated during onboarding
-        industry: 'other', // Will be updated during onboarding
-      });
-      console.log('[Signup] ✅ Tenant defaults initialized');
-    } catch (error) {
-      console.error('[Signup] Failed to initialize tenant defaults:', error);
-      // Non-fatal - tenant can still complete onboarding
-    }
+    // No email confirmation link required — if the Supabase project has
+    // "Confirm email" disabled, authData.session is already populated and
+    // the client below will sign in immediately. The client calls
+    // signInWithPassword itself right after this responds 201.
+    const requiresEmailConfirmation = !authData.session;
 
-    // Apply the 'other' industry agent immediately so the tenant has a
-    // working agent_config from minute one. This gets replaced with the
-    // matched industry agent once the business selects its real industry
-    // in onboarding (see /api/onboarding POST, step 0).
-    try {
-      await applyIndustryAgent(tenant.id, 'other');
-    } catch (error) {
-      console.error('[Signup] Failed to apply default industry agent:', error);
-      // Non-fatal - agent.ts falls back to the static prompts.ts default if agent_config is empty
-    }
-
-    console.log(`[Signup] Created: auth=${authUserId} tenant=${tenant.id} email=${normalizedEmail}`);
-    return NextResponse.json({ message: 'Check your email to confirm your account.' }, { status: 201 });
+    return NextResponse.json(
+      {
+        message: requiresEmailConfirmation
+          ? 'Account created.'
+          : 'Account created and signed in.',
+        requiresEmailConfirmation,
+      },
+      { status: 201 }
+    );
 
   } catch (error) {
     return NextResponse.json(
