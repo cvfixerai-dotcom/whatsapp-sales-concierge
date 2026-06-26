@@ -3,7 +3,7 @@ import { twilioService } from '../services/twilio';
 import { redisQueue } from '../queue/redis';
 import { getAIProvider } from './providers';
 import { buildSystemPrompt, getQualificationCriteria, calculateLeadScore } from './prompts';
-import { buildSimplifiedPrompt } from './prompt-simple';
+import { calculateWeightedLeadScore } from './lead-scoring';
 import { determineConversationState, ConversationState } from './state-manager';
 import { executeTool } from './tools';
 import { formatBookingConfirmation } from './booking-confirmation';
@@ -88,12 +88,19 @@ export class AIAgent {
         params.conversationId
       );
 
-      // 2. Build AI prompt with state management
-      const { prompt: systemPrompt, hasRecentBooking, state } = await this.buildSystemPrompt(
+      // 2. Build AI prompt — industry-aware prompt from prompts.ts is the live system prompt.
+      //    State manager is kept solely to decide tool availability (CRIT-2 fix below),
+      //    it no longer builds the prompt text itself.
+      const conversationHistoryText = this.formatHistoryText(context.messages);
+      const { hasRecentBooking, state } = await this.resolveBookingState(
+        context.contact,
+        context.messages
+      );
+      const systemPrompt = this.buildEffectiveSystemPrompt(
         context.tenant,
         context.contact,
         params.language,
-        context.messages
+        conversationHistoryText
       );
       const conversationHistory = this.formatHistory(context.messages);
 
@@ -241,11 +248,11 @@ export class AIAgent {
           console.log(`[AI Agent] Tool results:`, aiResponse.toolCalls.map(tc => `${tc.name}: ${tc.result?.success ? 'success' : 'failed'}`).join(', '));
           
           // 🔥 FIX: Rebuild system prompt with FRESH contact data
-          const { prompt: freshSystemPrompt } = await this.buildSystemPrompt(
+          const freshSystemPrompt = this.buildEffectiveSystemPrompt(
             context.tenant,
             context.contact, // Now has fresh data from reload above
             params.language,
-            context.messages
+            conversationHistoryText
           );
           console.log('[AI Agent] 🔄 REBUILT SYSTEM PROMPT with fresh contact data');
 
@@ -571,31 +578,105 @@ export class AIAgent {
   }
 
   /**
-   * Build system prompt for AI - using simplified state-managed approach
+   * Build the live system prompt for a tenant, preferring the industry_agents
+   * registry config (tenant.agent_config.system_prompt — set by
+   * applyIndustryAgent during signup/onboarding) over the static per-industry
+   * default in prompts.ts's buildSystemPrompt().
+   *
+   * This mirrors buildFullPrompt()'s composition (placeholders, services/FAQs/
+   * hours/lead-status/conversation-history sections) exactly, but swaps in
+   * agent_config.system_prompt as the base instead of CORE_RULES + the static
+   * INDUSTRY_CONTEXT block. Duplicated here (rather than calling into
+   * prompts.ts) because buildFullPrompt is private to prompts.ts and that file
+   * cannot be modified to accept a custom base prompt.
    */
-  private async buildSystemPrompt(
+  private buildEffectiveSystemPrompt(
     tenant: any,
     contact: any,
     language: string,
+    conversationHistory: string
+  ): string {
+    const agentConfig = tenant?.agent_config;
+    if (!agentConfig || !agentConfig.system_prompt) {
+      return buildSystemPrompt(tenant, contact, language, conversationHistory);
+    }
+
+    const companyName = tenant.company_name || 'Our Company';
+    const assistantName = tenant.ai_assistant_name || agentConfig.agent_name || 'the sales assistant';
+    const agentName = tenant.agent_display_name || 'our team member';
+
+    const replacePlaceholders = (text: string) =>
+      (text || '')
+        .replace(/\{\{company_name\}\}/g, companyName)
+        .replace(/\{\{assistant_name\}\}/g, assistantName)
+        .replace(/\{\{agent_name\}\}/g, agentName);
+
+    const services = tenant.services || [];
+    const faqs = tenant.faqs || [];
+    const businessHours = tenant.business_hours || {};
+
+    const servicesText = Array.isArray(services) && services.length > 0
+      ? `\nSERVICES OFFERED:\n${services.map((s: any) => {
+          if (typeof s === 'string') return `- ${s}`;
+          const name = s.name || s.title || '';
+          const areas = s.areas ? ` (Areas: ${s.areas.join(', ')})` : '';
+          const price = s.price_range ? ` — ${s.price_range}` : '';
+          const note = s.note ? ` | ${s.note}` : '';
+          return `- ${name}${areas}${price}${note}`;
+        }).join('\n')}`
+      : '';
+
+    const faqsText = Array.isArray(faqs) && faqs.length > 0
+      ? `\nFAQs:\n${faqs.slice(0, 10).map((f: any) => `Q: ${f.question || f.q}\nA: ${f.answer || f.a}`).join('\n')}`
+      : '';
+
+    const hoursText = businessHours && Object.keys(businessHours).length > 0
+      ? `\nBUSINESS HOURS: ${JSON.stringify(businessHours)}`
+      : '';
+
+    const customSection = tenant.ai_system_prompt
+      ? `\nCUSTOM INSTRUCTIONS FROM BUSINESS OWNER (follow these closely):\n${tenant.ai_system_prompt}\n`
+      : '';
+
+    return `You are ${assistantName}, a sales assistant at ${companyName}. Introduce yourself as ${assistantName} in your first message.
+${replacePlaceholders(agentConfig.system_prompt)}
+
+AGENT HANDOFF NAME: When you book an appointment, tell the customer: "Your appointment is booked with ${agentName}." Always mention ${agentName} by name so the customer knows who to expect.
+${customSection}
+${servicesText}
+${faqsText}
+${hoursText}
+
+CURRENT LEAD STATUS:
+- Name: ${contact.name || 'unknown'}
+- Email: ${contact.email || 'not collected yet'}
+- Temperature: ${contact.temperature || 'new'}
+- Score: ${contact.lead_score || 0}/100
+- Timeline: ${contact.timeline || 'unknown'}
+- Budget: ${contact.budget_range || 'unknown'}
+- Service Interest: ${contact.service_interest || 'unknown'}
+- Last Contact: ${contact.last_message_at || contact.updated_at || 'unknown'}
+
+RECENT CONVERSATION:
+${conversationHistory || 'This is the first message from this customer.'}
+`.trim();
+  }
+
+  /**
+   * Resolve the deterministic conversation state used for TOOL GATING only.
+   * The actual prompt text now comes from the industry-aware buildSystemPrompt()
+   * imported from ./prompts — this method no longer builds prompt text.
+   */
+  private async resolveBookingState(
+    contact: any,
     messages: any[],
     lastToolCalls: any[] = []
-  ): Promise<{ prompt: string; hasRecentBooking: boolean; state: ConversationState }> {
+  ): Promise<{ hasRecentBooking: boolean; state: ConversationState }> {
     try {
-      // Defensive checks
-      if (!contact) {
-        console.error('[Agent] CRITICAL: contact is null/undefined');
-        throw new Error('Contact is required');
+      if (!contact || !contact.id) {
+        console.error('[Agent] CRITICAL: contact missing/invalid for state resolution');
+        return { hasRecentBooking: false, state: 'general_chat' };
       }
-      if (!contact.id) {
-        console.error('[Agent] CRITICAL: contact.id is missing', contact);
-        throw new Error('Contact ID is required');
-      }
-
-      // Format conversation history (last 5 messages)
-      const history = messages
-        ?.slice(-5)
-        ?.map(m => `${m?.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m?.content || ''}`)
-        ?.join('\n') || '';
 
       // Check if there's a recent booking (within last 30 minutes)
       const { data: recentBooking } = await supabaseAdmin
@@ -607,10 +688,9 @@ export class AIAgent {
         .limit(1)
         .maybeSingle();
 
-      const hasRecentBooking = !!(recentBooking && 
+      const hasRecentBooking = !!(recentBooking &&
         new Date(recentBooking.created_at) > new Date(Date.now() - 30 * 60 * 1000));
 
-      // Determine conversation state with error handling
       let stateResult;
       try {
         stateResult = determineConversationState(
@@ -629,47 +709,29 @@ export class AIAgent {
         });
       } catch (stateError) {
         console.error('[Agent] State manager error:', stateError);
-        // Fall back to default state
-        stateResult = {
-          state: 'general_chat' as ConversationState,
-          context: 'ERROR FALLBACK: Default state due to state manager error',
-          allowedTools: ['update_lead', 'check_calendar'],
-          blockedTools: [],
-          promptAddendum: 'Start by asking what they are looking for.',
-        };
+        stateResult = { state: 'general_chat' as ConversationState };
       }
 
-      // Build simplified system prompt with error handling
-      let systemPrompt;
-      try {
-        systemPrompt = buildSimplifiedPrompt(
-          tenant?.company_name || 'Our Company',
-          tenant?.ai_assistant_name || 'Assistant',
-          tenant?.industry || 'other',
-          stateResult?.promptAddendum || '',
-          contact,
-          history
-        );
-      } catch (promptError) {
-        console.error('[Agent] Prompt builder error:', promptError);
-        // Fall back to minimal prompt
-        systemPrompt = `You are a helpful assistant from ${tenant?.company_name || 'Our Company'}. Be warm and professional. Ask what the customer is looking for.`;
-      }
-
-      return { 
-        prompt: systemPrompt, 
+      return {
         hasRecentBooking,
-        state: stateResult?.state || 'general_chat'
+        state: stateResult?.state || 'general_chat',
       };
     } catch (error) {
-      console.error('[Agent] buildSystemPrompt error:', error);
-      // Return safe fallback that won't crash
-      return {
-        prompt: `You are a helpful assistant. Be warm and professional. Ask what the customer is looking for.`,
-        hasRecentBooking: false,
-        state: 'general_chat'
-      };
+      console.error('[Agent] resolveBookingState error:', error);
+      return { hasRecentBooking: false, state: 'general_chat' };
     }
+  }
+
+  /**
+   * Format conversation history as plain text for the prompts.ts buildSystemPrompt() signature.
+   */
+  private formatHistoryText(messages: any[]): string {
+    return (
+      messages
+        ?.slice(-5)
+        ?.map(m => `${m?.sender_type === 'contact' ? 'Customer' : 'Assistant'}: ${m?.content || ''}`)
+        ?.join('\n') || ''
+    );
   }
 
   /**
@@ -990,7 +1052,7 @@ export class AIAgent {
 
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
-      .select('industry')
+      .select('industry, agent_config')
       .eq('id', contact.tenant_id)
       .single();
 
@@ -1001,7 +1063,13 @@ export class AIAgent {
       interest_level: qualificationData.interestLevel > 70 ? 'high' : qualificationData.interestLevel > 40 ? 'medium' : 'low',
     };
 
-    const { score } = calculateLeadScore(tenant?.industry || 'other', responses);
+    // Prefer the tenant's industry-agent lead_score_weights (from the
+    // industry_agents registry / onboarding Prompt Architect) over the
+    // static prompts.ts weights when present.
+    const weights = tenant?.agent_config?.lead_score_weights;
+    const { score } = (weights && Object.keys(weights).length > 0)
+      ? calculateWeightedLeadScore(weights, responses)
+      : calculateLeadScore(tenant?.industry || 'other', responses);
     const newScore = Math.min(100, Math.max(0, score));
 
     // 🔥 HIGH-2 FIX: Only update lead_score here.

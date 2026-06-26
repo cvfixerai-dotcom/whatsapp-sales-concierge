@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client';
-import { calculateLeadScore } from './calculate-score';
+import { calculateLeadScore } from '../prompts';
+import { calculateWeightedLeadScore } from '../lead-scoring';
 import { scheduleFollowUps, cancelFollowUps } from '../../services/followup-scheduler';
 import { sendEmail } from './send-email';
 
@@ -140,8 +141,44 @@ export async function updateLead({ contactId, updates }: UpdateLeadParams): Prom
       console.log('[Tool: updateLead] ✅ Temperature successfully updated to:', updatedContact.temperature);
     }
 
-    // Recalculate lead score
-    const newScore = await calculateLeadScore(updatedContact);
+    // Recalculate lead score using the weighted, industry-aware scorer from prompts.ts
+    // (same scorer agent.ts uses post-response — this was previously a separate,
+    // unweighted 3-signal implementation that disagreed with it).
+    const { data: tenantForScore } = await supabaseAdmin
+      .from('tenants')
+      .select('industry, agent_config')
+      .eq('id', existingContact.tenant_id)
+      .single();
+
+    const customFields = (updatedContact.custom_fields && typeof updatedContact.custom_fields === 'object')
+      ? updatedContact.custom_fields
+      : {};
+
+    const scoreResponses: Record<string, any> = {
+      budget: updatedContact.budget_range
+        || (updatedContact.budget_min || updatedContact.budget_max ? `${updatedContact.budget_min ?? ''}-${updatedContact.budget_max ?? ''}` : undefined),
+      timeline: updatedContact.timeline || updatedContact.move_timeline,
+      location: (Array.isArray(updatedContact.preferred_locations) && updatedContact.preferred_locations.length > 0)
+        ? updatedContact.preferred_locations.join(', ')
+        : customFields.location,
+      decision_maker: customFields.decision_maker,
+      need: updatedContact.service_interest,
+      service_type: updatedContact.service_interest,
+      medical_need: updatedContact.service_interest,
+      vehicle_type: updatedContact.property_type || customFields.vehicle_type,
+      urgency: updatedContact.timeline || updatedContact.move_timeline,
+      financing: customFields.financing,
+      specialty: customFields.specialty,
+      insurance: customFields.insurance,
+    };
+
+    // Prefer the tenant's industry-agent lead_score_weights over the static
+    // prompts.ts table when present (same preference rule as agent.ts's
+    // post-response updateLeadScore — see lead-scoring.ts).
+    const weights = tenantForScore?.agent_config?.lead_score_weights;
+    const { score: newScore } = (weights && Object.keys(weights).length > 0)
+      ? calculateWeightedLeadScore(weights, scoreResponses)
+      : calculateLeadScore(tenantForScore?.industry || 'other', scoreResponses);
 
     // Update the score separately
     const { error: scoreError } = await supabaseAdmin

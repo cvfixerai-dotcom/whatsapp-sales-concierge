@@ -266,14 +266,15 @@ async function processInboundMessage(
       // First message: send custom greeting without AI overhead
       const { data: tenantData } = await supabaseAdmin
         .from('tenants')
-        .select('ai_greeting, ai_assistant_name, company_name')
+        .select('ai_greeting, ai_assistant_name, company_name, agent_config')
         .eq('id', tenantId)
         .single();
 
       const greeting = getFirstGreeting(
         tenantData?.ai_greeting,
         tenantData?.company_name || 'Our Company',
-        tenantData?.ai_assistant_name || 'Assistant'
+        tenantData?.ai_assistant_name || 'Assistant',
+        tenantData?.agent_config?.greeting_message
       );
 
       await Promise.all([

@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // 2. Fetch tenant
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('setup_completed, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit, subscription_tier, trial_start_date')
+    .select('setup_completed, subscription_status, trial_end_date, trial_conversation_limit, monthly_conversation_limit, subscription_tier, trial_start_date, twilio_account_sid, twilio_whatsapp_number')
     .eq('id', tenantId)
     .single();
 
@@ -66,5 +66,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     trialInfo = { status: 'trial', daysRemaining, trialLimit: tenant.trial_conversation_limit || 25, usedCount: 0 };
   }
 
-  return <DashboardShell trialInfo={trialInfo}>{children}</DashboardShell>;
+  // WhatsApp/Twilio connection is decoupled from onboarding completion (Guard A
+  // above only checks setup_completed). Tenants can finish setup and use the
+  // rest of the dashboard before connecting Twilio — surface a reminder
+  // instead of blocking.
+  const whatsappConnected = !!(tenant?.twilio_account_sid && tenant?.twilio_whatsapp_number);
+
+  return <DashboardShell trialInfo={trialInfo} whatsappConnected={whatsappConnected}>{children}</DashboardShell>;
 }

@@ -28,6 +28,9 @@ import {
   HelpCircle,
   Plus,
   ChevronDown,
+  Copy,
+  Check,
+  Loader2,
 } from 'lucide-react';
 
 interface TenantSettings {
@@ -68,7 +71,16 @@ function SettingsPageContent() {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations' | 'business'>('ai');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations' | 'business' | 'whatsapp'>('ai');
+
+  // Deep-link support — the dashboard's "Connect WhatsApp" reminder banner
+  // links to /dashboard/settings?tab=whatsapp.
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['calendar', 'handoff', 'ai', 'templates', 'team', 'integrations', 'business', 'whatsapp'].includes(tab)) {
+      setActiveTab(tab as typeof activeTab);
+    }
+  }, [searchParams]);
 
   // Business settings state
   const [businessHours, setBusinessHours] = useState<Record<string, { open: string; close: string; closed: boolean }>>({});
@@ -80,6 +92,18 @@ function SettingsPageContent() {
   // Integrations state
   const [crmWebhookUrl, setCrmWebhookUrl] = useState('');
   const [savingIntegrations, setSavingIntegrations] = useState(false);
+
+  // WhatsApp/Twilio connection state — connected here, after onboarding,
+  // since the customer's own Twilio account setup can take 24-48hrs and
+  // shouldn't block finishing the rest of onboarding.
+  const [whatsappConnected, setWhatsappConnected] = useState(false);
+  const [twilioAccountSid, setTwilioAccountSid] = useState('');
+  const [twilioAuthToken, setTwilioAuthToken] = useState('');
+  const [twilioWhatsappNumber, setTwilioWhatsappNumber] = useState('');
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false);
+  const [twilioTesting, setTwilioTesting] = useState(false);
+  const [twilioTestResult, setTwilioTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [webhookCopied, setWebhookCopied] = useState(false);
   
   // AI config state
   const [savingAi, setSavingAi] = useState(false);
@@ -137,8 +161,65 @@ function SettingsPageContent() {
       fetchTeam();
       fetchIntegrations();
       fetchBusinessSettings();
+      fetchWhatsappSettings();
     }
   }, [_authReady]);
+
+  async function fetchWhatsappSettings() {
+    try {
+      const res = await fetch('/api/settings/whatsapp');
+      if (!res.ok) return;
+      const data = await res.json();
+      setWhatsappConnected(!!data.connected);
+      setTwilioAccountSid(data.twilio_account_sid || '');
+      setTwilioWhatsappNumber(data.twilio_whatsapp_number || '');
+    } catch (e) { console.error('Error fetching WhatsApp settings:', e); }
+  }
+
+  async function handleSaveWhatsapp(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingWhatsapp(true); setMessage(null);
+    try {
+      const res = await fetch('/api/settings/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          twilio_account_sid: twilioAccountSid,
+          twilio_auth_token: twilioAuthToken,
+          twilio_whatsapp_number: twilioWhatsappNumber,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setMessage({ type: 'success', text: 'WhatsApp number connected!' });
+      setTwilioAuthToken('');
+      fetchWhatsappSettings();
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message || 'Failed to save WhatsApp settings' });
+    } finally { setSavingWhatsapp(false); }
+  }
+
+  async function handleTestTwilio() {
+    setTwilioTesting(true);
+    setTwilioTestResult(null);
+    try {
+      const res = await fetch('/api/onboarding/test-twilio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          twilio_account_sid: twilioAccountSid,
+          twilio_auth_token: twilioAuthToken,
+          twilio_whatsapp_number: twilioWhatsappNumber,
+        }),
+      });
+      const data = await res.json();
+      setTwilioTestResult(data);
+    } catch {
+      setTwilioTestResult({ success: false, message: 'Network error' });
+    } finally {
+      setTwilioTesting(false);
+    }
+  }
 
   async function fetchSettings() {
     try {
@@ -471,6 +552,20 @@ function SettingsPageContent() {
             >
               <Briefcase className="inline h-4 w-4 mr-2" />
               Business
+            </button>
+            <button
+              onClick={() => setActiveTab('whatsapp')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'whatsapp'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Phone className="inline h-4 w-4 mr-2" />
+              WhatsApp
+              {!whatsappConnected && (
+                <span className="ml-2 inline-block w-2 h-2 rounded-full bg-amber-500" />
+              )}
             </button>
             <button
               onClick={() => setActiveTab('team')}
@@ -1083,6 +1178,105 @@ function SettingsPageContent() {
                   <button type="submit" disabled={savingIntegrations} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                     {savingIntegrations ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Save Webhook URL
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* WhatsApp/Twilio Connection — decoupled from onboarding; connect any time here */}
+        {activeTab === 'whatsapp' && (
+          <form onSubmit={handleSaveWhatsapp}>
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Phone className="h-5 w-5 text-blue-600" />
+                    WhatsApp Connection
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {whatsappConnected
+                      ? 'Your WhatsApp number is connected and ready to receive messages.'
+                      : "Connect your Twilio WhatsApp number to start receiving messages. Twilio account setup can take 24-48hrs — no rush, your setup is already complete."}
+                  </p>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-medium text-blue-900 mb-2">📱 WhatsApp Business Setup Guide</h3>
+                    <ol className="text-sm text-blue-800 space-y-2">
+                      <li>1. Go to <a href="https://www.twilio.com/console" target="_blank" rel="noopener" className="underline">Twilio Console</a> and create an account</li>
+                      <li>2. Navigate to Messaging → Try it out → Send a WhatsApp message</li>
+                      <li>3. Follow the sandbox setup instructions</li>
+                      <li>4. Copy your credentials below</li>
+                    </ol>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Twilio Account SID *</label>
+                    <input type="text" value={twilioAccountSid}
+                      onChange={(e) => setTwilioAccountSid(e.target.value)}
+                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Twilio Auth Token {whatsappConnected ? '(leave blank to keep current)' : '*'}</label>
+                    <input type="password" value={twilioAuthToken}
+                      onChange={(e) => setTwilioAuthToken(e.target.value)}
+                      placeholder={whatsappConnected ? '••••••••••••' : 'Your auth token'}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number *</label>
+                    <input type="text" value={twilioWhatsappNumber}
+                      onChange={(e) => setTwilioWhatsappNumber(e.target.value)}
+                      placeholder="+14155238886 (Twilio sandbox number)"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      disabled={twilioTesting || !twilioAccountSid || !twilioAuthToken}
+                      onClick={handleTestTwilio}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                    >
+                      {twilioTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                      {twilioTesting ? 'Testing...' : 'Test Connection'}
+                    </button>
+                    {twilioTestResult && (
+                      <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
+                        twilioTestResult.success
+                          ? 'bg-green-50 border border-green-200 text-green-800'
+                          : 'bg-red-50 border border-red-200 text-red-800'
+                      }`}>
+                        {twilioTestResult.message}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h3 className="font-medium text-yellow-900 mb-2">⚠️ Important: Configure Webhook URL</h3>
+                    <p className="text-sm text-yellow-800 mb-3">In your Twilio Console, set the webhook URL to:</p>
+                    <div className="flex items-center gap-2 bg-white rounded-lg p-3 border">
+                      <code className="flex-1 text-sm text-gray-800 break-all">
+                        {typeof window !== 'undefined' ? `${window.location.origin}/api/webhook/twilio` : 'https://concierge.fixeraitech.com/api/webhook/twilio'}
+                      </code>
+                      <button type="button" onClick={() => {
+                        const url = `${window.location.origin}/api/webhook/twilio`;
+                        navigator.clipboard.writeText(url);
+                        setWebhookCopied(true);
+                        setTimeout(() => setWebhookCopied(false), 2000);
+                      }} className="p-2 hover:bg-gray-100 rounded">
+                        {webhookCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-500" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                  <button type="submit" disabled={savingWhatsapp} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    {savingWhatsapp ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {whatsappConnected ? 'Update Connection' : 'Connect WhatsApp'}
                   </button>
                 </div>
               </div>

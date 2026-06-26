@@ -35,9 +35,11 @@ const PAGE_TITLES: Record<string, string> = {
 export default function DashboardShell({
   children,
   trialInfo,
+  whatsappConnected,
 }: {
   children: React.ReactNode;
   trialInfo: { status: string; daysRemaining: number | null; trialLimit: number | null; usedCount: number } | null;
+  whatsappConnected?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -47,6 +49,7 @@ export default function DashboardShell({
   const [notificationCount, setNotificationCount] = useState(0);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
+  const [whatsappBannerDismissed, setWhatsappBannerDismissed] = useState(false);
   const notificationPollRef = useRef<NodeJS.Timeout | null>(null);
   const lastNotifiedRef = useRef<Record<string, string>>({});
   const lastSoundedRef = useRef<Record<string, string>>({});
@@ -236,6 +239,26 @@ export default function DashboardShell({
 
   return (
     <div className="dashboard-shell min-h-screen text-foreground">
+      {/* WhatsApp connection reminder — Twilio connection is no longer required
+          to finish onboarding, so this is the surface that nudges tenants who
+          completed setup but haven't connected a number yet. */}
+      {whatsappConnected === false && !whatsappBannerDismissed && pathname !== '/dashboard/settings' && (
+        <div className="w-full px-4 py-2 text-sm font-medium text-center bg-blue-50 text-blue-800 border-b border-blue-200 flex items-center justify-center gap-3">
+          <span>
+            Your AI assistant is set up, but no WhatsApp number is connected yet — messages can&apos;t come in until you do.{' '}
+            <a href="/dashboard/settings?tab=whatsapp" className="underline font-semibold">Connect WhatsApp</a>
+          </span>
+          <button
+            type="button"
+            onClick={() => setWhatsappBannerDismissed(true)}
+            className="text-blue-400 hover:text-blue-700"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Trial Banner */}
       {trialInfo?.status === 'trial' && trialInfo.daysRemaining !== null && (
         <div className={`w-full px-4 py-2 text-sm font-medium text-center ${

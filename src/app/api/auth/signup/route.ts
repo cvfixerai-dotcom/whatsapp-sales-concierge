@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { createClient } from '@supabase/supabase-js';
-import { initializeTenantDefaults } from '@/lib/services/tenant-initializer';
+import { initializeTenantDefaults, applyIndustryAgent } from '@/lib/services/tenant-initializer';
 
 const supabaseAuth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -101,6 +101,17 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('[Signup] Failed to initialize tenant defaults:', error);
       // Non-fatal - tenant can still complete onboarding
+    }
+
+    // Apply the 'other' industry agent immediately so the tenant has a
+    // working agent_config from minute one. This gets replaced with the
+    // matched industry agent once the business selects its real industry
+    // in onboarding (see /api/onboarding POST, step 0).
+    try {
+      await applyIndustryAgent(tenant.id, 'other');
+    } catch (error) {
+      console.error('[Signup] Failed to apply default industry agent:', error);
+      // Non-fatal - agent.ts falls back to the static prompts.ts default if agent_config is empty
     }
 
     console.log(`[Signup] Created: auth=${authUserId} tenant=${tenant.id} email=${normalizedEmail}`);

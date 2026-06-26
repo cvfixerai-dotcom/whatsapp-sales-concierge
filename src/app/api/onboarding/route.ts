@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/supabase-server';
 import { createDefaultFollowUpSequences } from '@/lib/services/followup-templates';
-import { initializeTenantDefaults } from '@/lib/services/tenant-initializer';
+import { initializeTenantDefaults, applyIndustryAgent } from '@/lib/services/tenant-initializer';
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,17 +51,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
 
-    // Calculate completion status for each step
+    // Calculate completion status for each step.
+    // Twilio/WhatsApp connection is intentionally NOT one of these steps —
+    // it's decoupled from onboarding completion (see /api/settings/whatsapp)
+    // since Twilio account setup on the customer's side can take 24-48hrs
+    // and must not block the rest of the wizard.
     const steps = [
       {
         id: 'business_profile',
         name: 'Business Profile',
         completed: !!(tenant.company_name && tenant.business_type && tenant.business_description),
-      },
-      {
-        id: 'twilio_setup',
-        name: 'WhatsApp Setup',
-        completed: !!(tenant.twilio_account_sid && tenant.twilio_whatsapp_number),
       },
       {
         id: 'ai_config',
@@ -146,6 +145,7 @@ export async function POST(request: NextRequest) {
             const industryMap: Record<string, string> = {
               'real_estate': 'real-estate', 'automotive': 'automotive',
               'healthcare': 'medical', 'home_services': 'home-services',
+              'mortgage': 'mortgage', 'dental': 'dental', 'recruitment': 'recruitment',
             };
             updates.industry = industryMap[data.business_type] || 'other';
           }
@@ -157,13 +157,7 @@ export async function POST(request: NextRequest) {
           if (data.agent_display_name) updates.agent_display_name = data.agent_display_name;
           break;
 
-        case 1: // Twilio Setup
-          if (data.twilio_account_sid) updates.twilio_account_sid = data.twilio_account_sid;
-          if (data.twilio_auth_token) updates.twilio_auth_token = data.twilio_auth_token;
-          if (data.twilio_whatsapp_number) updates.twilio_whatsapp_number = data.twilio_whatsapp_number;
-          break;
-
-        case 2: // AI Configuration
+        case 1: // AI Configuration
           if (data.ai_personality) updates.ai_personality = data.ai_personality;
           if (data.ai_language) updates.ai_language = data.ai_language;
           if (data.ai_greeting) updates.ai_greeting = data.ai_greeting;
@@ -172,7 +166,7 @@ export async function POST(request: NextRequest) {
           if (data.ai_assistant_name) updates.ai_assistant_name = data.ai_assistant_name;
           break;
 
-        case 3: // Calendar Setup — initialize availability_settings with business hours
+        case 2: // Calendar Setup — initialize availability_settings with business hours
           // Get current tenant data to use timezone and industry
           const { data: tenantData } = await supabaseAdmin
             .from('tenants')
@@ -192,7 +186,7 @@ export async function POST(request: NextRequest) {
           console.log('[Onboarding] ✅ Calendar initialized for tenant');
           break;
 
-        case 4: // Handoff Setup
+        case 3: // Handoff Setup
           if (data.handoff_settings) updates.handoff_settings = data.handoff_settings;
           break;
       }
@@ -211,6 +205,17 @@ export async function POST(request: NextRequest) {
     // Auto-create follow-up sequences when industry is set (Step 0)
     if (step === 0 && updates.industry) {
       await createDefaultFollowUpSequences(sessionUser.tenantId, updates.industry);
+
+      // Apply the matching industry agent (system prompt, qualification
+      // stages, lead score weights, etc.) now that the business has told
+      // us its real industry. Falls back to 'other' with a warning if
+      // there's no exact match. Non-fatal: agent.ts still has the static
+      // prompts.ts prompt as a fallback if this fails.
+      try {
+        await applyIndustryAgent(sessionUser.tenantId, updates.industry);
+      } catch (error) {
+        console.error('[Onboarding API] Failed to apply industry agent:', error);
+      }
     }
 
     // Log onboarding progress
@@ -233,7 +238,6 @@ export async function POST(request: NextRequest) {
 function getStepName(step: number): string {
   const names = [
     'business_profile',
-    'twilio_setup',
     'ai_config',
     'calendar_setup',
     'handoff_setup',

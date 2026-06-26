@@ -4,7 +4,6 @@ export { checkCalendar } from './check-calendar';
 export { bookAppointment } from './book-appointment';
 export { cancelAppointment } from './cancel-appointment';
 export { sendEmail } from './send-email';
-export { calculateLeadScore, getMessageCount, hasAppointment } from './calculate-score';
 
 // Tool registry for dynamic execution
 // NOTE: Do NOT include tenantId, contactId, conversationId in schemas.

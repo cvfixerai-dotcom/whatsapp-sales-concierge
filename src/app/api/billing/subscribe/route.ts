@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializePaystackTransaction } from '@/lib/billing/paystack';
+import { getCheckoutUrlForTier } from '@/lib/billing/whop';
 import { getSessionUser } from '@/lib/supabase-server';
 
-// Paystack subscription flow:
-// 1. Initialize a transaction to collect card details (this route)
-// 2. Customer pays via Paystack hosted page
-// 3. Paystack webhook (charge.success) activates the subscription
-// We removed the setup_fee_paid gate — fee is $0 so it was blocking everyone.
+// Whop subscription flow (active processor):
+// 1. Look up the pre-existing Whop plan's hosted checkout URL (this route)
+// 2. Customer pays on Whop's hosted checkout page
+// 3. Whop webhook (payment.succeeded / membership.activated) activates the subscription
+//
+// Paystack remains in the codebase (lib/billing/paystack.ts) but is no
+// longer called from this route.
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,15 +24,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid tier specified' }, { status: 400 });
     }
 
-    const { tenantId } = sessionUser;
-
-    // Initialize Paystack transaction (redirects user to Paystack checkout)
-    const transaction = await initializePaystackTransaction(tenantId, tier);
+    const checkoutUrl = await getCheckoutUrlForTier(tier);
 
     return NextResponse.json({
       success: true,
-      authorization_url: transaction.authorization_url,
-      reference: transaction.reference,
+      checkout_url: checkoutUrl,
     });
   } catch (error) {
     console.error('[Billing] Subscribe error:', error);

@@ -84,9 +84,9 @@ export default function BillingPage() {
       });
       
       if (!response.ok) throw new Error('Failed to initiate upgrade');
-      
-      const { authorization_url } = await response.json();
-      window.location.href = authorization_url;
+
+      const { checkout_url } = await response.json();
+      window.location.href = checkout_url;
     } catch (error) {
       console.error('Error upgrading:', error);
       toast.error('Failed to process upgrade. Please try again.');

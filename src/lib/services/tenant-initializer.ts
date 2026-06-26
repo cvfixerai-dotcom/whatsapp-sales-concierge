@@ -315,3 +315,68 @@ function getDefaultFaqs(industry: string): any[] {
   
   return faqs[industry] || faqs['other'];
 }
+
+/**
+ * Apply an industry agent (from the industry_agents registry) to a tenant.
+ *
+ * Looks up the industry_agents row matching `industry`, falling back to
+ * 'other' (with a warning) if there's no exact match — e.g. a brand-new
+ * vertical that hasn't been seeded yet. Writes the matched config onto
+ * tenants.agent_config / tenants.industry_agent_id / tenants.generated_prompt.
+ *
+ * agent.ts (Phase 2D) prefers tenant.agent_config over the static
+ * prompts.ts default whenever agent_config.system_prompt is present, so
+ * calling this is what actually "switches on" the industry-specific agent
+ * for a tenant. Safe to call multiple times (e.g. re-applied if the
+ * business changes industry during onboarding).
+ */
+export async function applyIndustryAgent(tenantId: string, industry: string) {
+  let { data: agent, error } = await supabaseAdmin
+    .from('industry_agents')
+    .select('*')
+    .eq('industry', industry)
+    .eq('is_active', true)
+    .single();
+
+  if (error || !agent) {
+    console.warn(`[TenantInit] No industry_agents match for industry="${industry}" on tenant ${tenantId.substring(0, 8)} — falling back to 'other'`);
+    const fallback = await supabaseAdmin
+      .from('industry_agents')
+      .select('*')
+      .eq('industry', 'other')
+      .eq('is_active', true)
+      .single();
+    agent = fallback.data;
+    if (fallback.error || !agent) {
+      console.error('[TenantInit] No "other" industry_agents fallback row found — cannot apply industry agent:', fallback.error);
+      return { success: false, error: 'No industry agent available (not even "other" fallback)' };
+    }
+  }
+
+  const agentConfig = {
+    system_prompt: agent.system_prompt,
+    greeting_message: agent.greeting_message,
+    qualification_stages: agent.qualification_stages,
+    lead_score_weights: agent.lead_score_weights,
+    contact_fields: agent.contact_fields,
+    handoff_triggers: agent.handoff_triggers,
+    agent_name: agent.agent_name,
+  };
+
+  const { error: updateError } = await supabaseAdmin
+    .from('tenants')
+    .update({
+      industry_agent_id: agent.id,
+      agent_config: agentConfig,
+      generated_prompt: agent.system_prompt,
+    })
+    .eq('id', tenantId);
+
+  if (updateError) {
+    console.error('[TenantInit] Failed to apply industry agent to tenant:', updateError);
+    return { success: false, error: updateError.message };
+  }
+
+  console.log(`[TenantInit] ✅ Applied industry agent "${agent.industry}" to tenant ${tenantId.substring(0, 8)}`);
+  return { success: true, industryAgentId: agent.id, industry: agent.industry };
+}

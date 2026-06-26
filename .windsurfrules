@@ -1,0 +1,667 @@
+# WhatsApp Sales Concierge - Windsurf Development Rules
+
+## Project Context
+
+This is a multi-tenant SaaS platform providing AI-powered WhatsApp sales agents for SMEs. The system automates lead qualification, appointment booking, and customer engagement through WhatsApp using Claude/GPT.
+
+**Tech Stack:**
+- Next.js 15.1.11 (App Router) + TypeScript
+- Supabase (PostgreSQL) with RLS
+- Anthropic Claude Sonnet 4 (primary AI, 95% tool calling success)
+- OpenAI GPT-4o (fallback, 70-80% tool calling success)
+- Twilio (WhatsApp integration)
+- Upstash Redis (background jobs)
+- Vercel (deployment)
+
+**Key Files:**
+- `/src/lib/ai/agent.ts` - Main AI orchestrator
+- `/src/lib/ai/tools/` - AI tool implementations
+- `/src/lib/ai/prompts.ts` - System prompts
+- `/src/lib/services/twilio/` - WhatsApp integration
+- `/src/lib/services/calendar/` - Appointment system
+- `/src/app/api/webhooks/twilio/` - Webhook handler
+
+---
+
+## Core Architectural Principles
+
+### 1. Multi-Tenant Isolation
+- ALL database queries MUST include tenant_id filter
+- Use Supabase RLS policies for data protection
+- Never leak data across tenants
+- Test tenant isolation in every feature
+
+### 2. AI-First Design
+- AI is the primary interface, not humans
+- Design for conversation, not forms
+- Tools are mandatory, not optional
+- State must persist across conversation turns
+
+### 3. Production Reliability
+- Handle tool failures gracefully (retry + fallback)
+- Log every tool execution with parameters
+- Never leave users without a response
+- Implement circuit breakers for external APIs
+
+---
+
+## AI Agent Behavior Rules
+
+### Conversation Flow Requirements
+
+**CRITICAL: The agent MUST:**
+1. **Keep messages short** - 2-3 sentences maximum (WhatsApp context)
+2. **Ask one question at a time** - Don't overwhelm users
+3. **Always use tools** - update_lead, check_calendar, book_appointment are MANDATORY
+4. **Match user's language** - English or Arabic, auto-detect
+5. **Never reveal AI identity** - Act as company representative
+6. **Goal: Book appointments** - Every conversation should move toward booking
+
+**Message Structure:**
+```
+✅ GOOD: "I have Monday 2pm or Tuesday 3pm available. Which works better?"
+❌ BAD: "I can check our calendar for available appointment slots. We offer various times throughout the week. Would you like to see Monday, Tuesday, or Wednesday options? Please let me know your preference and I'll provide specific times."
+```
+
+### State Management
+
+**Conversation State MUST:**
+- Persist in database (contacts, conversations, messages tables)
+- Include: lead temperature, conversation history, last tool results
+- Reload on every turn (no in-memory state between requests)
+- Handle interrupted conversations (user disappears mid-flow)
+
+**Lead Temperature Transitions:**
+```
+new → cold (just browsing)
+new → warm (interested, gathering info)
+new → hot (ready to book, urgent timeline)
+warm → hot (timeline accelerated)
+hot → booked (appointment confirmed)
+```
+
+**Temperature Logic:**
+- **NEW:** First message, no qualification yet
+- **COLD:** No budget/timeline, "just looking"
+- **WARM:** Has budget/timeline but not urgent (weeks/months away)
+- **HOT:** Urgent timeline (days/this week) + budget confirmed
+- **BOOKED:** Appointment scheduled
+
+### Tool Execution Patterns
+
+**update_lead Tool:**
+```typescript
+// WHEN TO CALL:
+// - User provides name, email, phone, budget, timeline
+// - Lead temperature changes
+// - Service interest identified
+
+// REQUIRED PARAMETERS:
+{
+  tenantId: string,
+  contactId: string,
+  // At least ONE of these:
+  name?: string,
+  email?: string,
+  phone?: string,
+  temperature?: 'new' | 'cold' | 'warm' | 'hot' | 'booked',
+  budgetRange?: string,
+  timeline?: string,
+  serviceInterest?: string,
+  metadata?: Record<string, any>
+}
+
+// CRITICAL: Only collect email for HOT leads or explicit requests
+// Don't ask for email from cold/warm leads (feels pushy)
+```
+
+**check_calendar Tool:**
+```typescript
+// WHEN TO CALL:
+// - User expresses interest in booking ("when are you available?")
+// - Lead temperature is HOT
+// - User asks about specific date/time
+
+// REQUIRED PARAMETERS:
+{
+  tenantId: string,
+  contactId: string,
+  daysAhead?: number, // Default: 7
+  preferredDate?: string, // Format: "2026-04-25"
+  preferredTime?: string // Format: "morning" | "afternoon" | "evening"
+}
+
+// RETURNS:
+{
+  available_slots: Array<{
+    date: string,
+    time: string,
+    iso: string,
+    display: string
+  }>,
+  business_timezone: string
+}
+
+// CRITICAL: Store last_offered_slots in conversation metadata
+// Used for validation in book_appointment
+```
+
+**book_appointment Tool:**
+```typescript
+// WHEN TO CALL:
+// - User selects a time from offered slots
+// - After check_calendar has been called
+// - User confirms "yes" to a specific time
+
+// REQUIRED PARAMETERS:
+{
+  tenantId: string,
+  contactId: string,
+  conversationId: string,
+  slotTime: string // MUST match one of last_offered_slots (ISO format)
+}
+
+// VALIDATION:
+// - slotTime MUST be in last_offered_slots (from check_calendar)
+// - If not, call check_calendar again, don't book invalid slots
+
+// SUCCESS RESPONSE:
+{
+  success: true,
+  appointment_id: string,
+  confirmed_iso: string,
+  confirmed_display: string
+}
+```
+
+### Recursive Tool Call Handling
+
+**CRITICAL FIX (March 2, 2026 - Commit 5011f55):**
+
+When Claude calls multiple tools in sequence (e.g., update_lead → check_calendar), the agent MUST:
+
+1. Execute first tool
+2. Make follow-up API call with tool result
+3. Check if response contains MORE tool calls
+4. If yes, execute those tools
+5. Make SECOND follow-up call to get final text response
+6. Return text to user
+
+**Code Pattern:**
+```typescript
+// src/lib/ai/agent.ts
+async function processMessage(message: string) {
+  // Initial call
+  let response = await aiProvider.chat(messages);
+  
+  // Execute tools from response
+  if (response.tool_calls) {
+    const toolResults = await executeTools(response.tool_calls);
+    
+    // Follow-up call with results
+    response = await aiProvider.chat([...messages, ...toolResults]);
+    
+    // Check for SECOND round of tool calls
+    if (response.tool_calls) {
+      const secondResults = await executeTools(response.tool_calls);
+      
+      // SECOND follow-up call to get text
+      response = await aiProvider.chat([...messages, ...secondResults]);
+    }
+  }
+  
+  return response.content;
+}
+```
+
+**Without this fix:** Empty responses, "I apologize for the confusion..." fallbacks
+
+**With this fix:** 95%+ success rate for multi-step tool executions
+
+---
+
+## Critical Issues to Prevent
+
+### Issue 1: "Not Booking Properly"
+
+**Root Causes:**
+1. ❌ Booking slots not in last_offered_slots (validation failure)
+2. ❌ Tool parameters missing required fields
+3. ❌ Timezone confusion (always use business timezone)
+4. ❌ Duplicate bookings (no conflict detection)
+
+**Prevention:**
+```typescript
+// In book_appointment tool:
+async function bookAppointment(params) {
+  // 1. Validate slot against last_offered_slots
+  const lastOffered = await getLastOfferedSlots(params.conversationId);
+  if (!lastOffered.includes(params.slotTime)) {
+    throw new Error("Invalid slot - must call check_calendar first");
+  }
+  
+  // 2. Check for conflicts
+  const conflict = await checkConflicts(params.slotTime, params.tenantId);
+  if (conflict) {
+    throw new Error("Slot already booked");
+  }
+  
+  // 3. Create appointment
+  const appointment = await createAppointment({
+    tenant_id: params.tenantId,
+    contact_id: params.contactId,
+    conversation_id: params.conversationId,
+    scheduled_at: params.slotTime,
+    status: 'scheduled'
+  });
+  
+  // 4. Update lead temperature
+  await updateLeadTemperature(params.contactId, 'booked');
+  
+  return { success: true, appointment_id: appointment.id };
+}
+```
+
+### Issue 2: "Not Responding Properly"
+
+**Root Causes:**
+1. ❌ Empty AI response (recursive tool call bug)
+2. ❌ Tool execution timeout (no fallback)
+3. ❌ Context too long (truncation)
+4. ❌ User sends unexpected input (no error handling)
+
+**Prevention:**
+```typescript
+// In agent.ts:
+async function handleMessage(message: string) {
+  try {
+    // Set timeout for AI response
+    const response = await Promise.race([
+      processMessage(message),
+      timeout(10000) // 10 second max
+    ]);
+    
+    if (!response || response.trim() === '') {
+      // Fallback response
+      return "I'm processing your request. One moment please...";
+    }
+    
+    return response;
+    
+  } catch (error) {
+    console.error('[AI Agent] Error:', error);
+    
+    // Graceful degradation
+    if (error.code === 'TIMEOUT') {
+      return "I'm experiencing high load. Please try again in a moment.";
+    }
+    
+    if (error.code === 'TOOL_FAILURE') {
+      return "I'm having trouble accessing our system. Let me connect you with someone who can help.";
+    }
+    
+    // Generic fallback
+    return "I apologize for the confusion. Let me connect you with our team.";
+  }
+}
+```
+
+### Issue 3: Context Loss
+
+**Root Causes:**
+1. ❌ In-memory state not persisted
+2. ❌ User goes off-topic then returns
+3. ❌ Long conversations exceed context window
+4. ❌ Multiple concurrent messages from same user
+
+**Prevention:**
+```typescript
+// ALWAYS reload from database:
+async function getConversationContext(conversationId: string) {
+  const messages = await db
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+    .limit(20); // Last 20 messages max
+  
+  const contact = await db
+    .from('contacts')
+    .select('*')
+    .eq('id', contactId)
+    .single();
+  
+  return {
+    history: messages,
+    leadData: contact
+  };
+}
+
+// Handle concurrent messages:
+async function processMessage(conversationId, message) {
+  // Acquire lock
+  const lock = await acquireLock(`conversation:${conversationId}`);
+  
+  try {
+    // Process message
+    const response = await handleMessage(message);
+    
+    // Save response
+    await saveMessage(conversationId, response);
+    
+    return response;
+  } finally {
+    // Release lock
+    await releaseLock(lock);
+  }
+}
+```
+
+---
+
+## Human Handoff Rules
+
+**Automatic Escalation Triggers:**
+
+1. **Frustration Keywords:**
+   - "angry", "terrible", "useless", "worst", "horrible"
+   - "scam", "fraud", "liar", "incompetent"
+   
+2. **Explicit Human Request:**
+   - "speak to manager", "real person", "human agent"
+   - "transfer me", "escalate", "supervisor"
+   
+3. **Complex Questions:**
+   - Legal questions ("contract", "terms", "liability")
+   - Pricing negotiations beyond standard
+   - Custom requirements outside service catalog
+   
+4. **Tool Failures:**
+   - check_calendar fails 2+ times
+   - book_appointment fails 2+ times
+   - Any critical tool unavailable
+
+**Handoff Process:**
+```typescript
+async function escalateToHuman(contactId: string, reason: string) {
+  // 1. Mark lead as needs_human
+  await db
+    .from('contacts')
+    .update({ needs_human: true })
+    .eq('id', contactId);
+  
+  // 2. Send transition message
+  await sendMessage({
+    content: "Let me connect you with our specialist who can better assist you. They'll be with you shortly.",
+    sender_type: 'system'
+  });
+  
+  // 3. Stop AI responses
+  await db
+    .from('conversations')
+    .update({ status: 'handed_off' })
+    .eq('contact_id', contactId);
+  
+  // 4. Notify human agent (dashboard notification)
+  await notifyAgent({
+    contactId,
+    reason,
+    priority: 'high'
+  });
+}
+```
+
+---
+
+## Database Query Optimization
+
+**March 7, 2026 Performance Fix:**
+
+**BEFORE (inefficient):**
+```typescript
+// Reload contact after EVERY tool call
+async function processTools(tools) {
+  for (const tool of tools) {
+    await executeTool(tool);
+    contact = await reloadContact(); // ❌ Unnecessary DB query
+  }
+}
+```
+
+**AFTER (optimized):**
+```typescript
+// Only reload contact after update_lead
+async function processTools(tools) {
+  for (const tool of tools) {
+    await executeTool(tool);
+    
+    // Only reload if update_lead was called
+    if (tool.name === 'update_lead') {
+      contact = await reloadContact(); // ✅ Only when needed
+    }
+  }
+}
+```
+
+**Result:** 50% reduction in DB queries
+
+---
+
+## Testing Requirements
+
+**Before Deploying ANY Conversation Flow:**
+
+```bash
+# Test checklist:
+- [ ] Happy path (smooth booking)
+- [ ] Interrupted flow (user stops mid-conversation)
+- [ ] Confusion (user asks unrelated questions)
+- [ ] Edge cases (special characters, emojis, very long messages)
+- [ ] Error states (API down, invalid data, tool failures)
+- [ ] Multi-language (English → English, Arabic → Arabic)
+- [ ] Concurrent messages (user sends 3 messages in 1 second)
+- [ ] Human handoff (frustration detected)
+- [ ] Temperature transitions (new → cold → warm → hot → booked)
+- [ ] Calendar edge cases (no slots, all booked, outside business hours)
+```
+
+**Test Scripts:**
+```bash
+npm run test:booking      # Test full booking flow
+npm run test:systems      # Test all integrations
+npm run clear:conversations # Clear test data
+```
+
+---
+
+## Logging & Debugging
+
+**Enhanced Tool Parameter Logging (March 7, 2026):**
+
+```typescript
+// In every tool:
+export async function toolName(params: ToolParams) {
+  console.log(`[Tool: ${toolName}] ✅ CALLED with parameters:`, {
+    ...params,
+    // Redact sensitive data
+    password: params.password ? '[REDACTED]' : undefined
+  });
+  
+  try {
+    const result = await executeToolLogic(params);
+    
+    console.log(`[Tool: ${toolName}] ✅ COMPLETED:`, {
+      success: true,
+      resultSummary: result.summary
+    });
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`[Tool: ${toolName}] ❌ FAILED:`, {
+      error: error.message,
+      stack: error.stack,
+      params
+    });
+    
+    throw error;
+  }
+}
+```
+
+**Debug Flags:**
+```env
+DEBUG_ANTHROPIC=true     # Log all Claude API calls
+DEBUG_TOOLS=true         # Log tool executions
+DEBUG_DB=true            # Log database queries
+```
+
+---
+
+## Brand & Design Guidelines
+
+**Brand Identity:**
+- **Company:** FixerAI Technologies Ltd
+- **Product:** WhatsApp Sales Concierge
+- **Primary Color:** Electric Green (#00FF00 or #10B981)
+- **Secondary Colors:** Dark ink (#1F2937), Charcoal (#374151)
+- **Typography:** Modern, professional, readable
+- **Tone:** Professional but approachable, not corporate
+
+**Design Principles (from frontend-design skill):**
+1. **Bold aesthetic direction** - Not generic SaaS
+2. **Distinctive typography** - Avoid Inter, Roboto, system fonts
+3. **Smooth animations** - Micro-interactions for delight
+4. **Visual hierarchy** - Clear information architecture
+5. **Lead temperature visualization** - Color-coded, animated
+
+**Component Design:**
+- Conversation view: Premium messaging app aesthetic
+- Dashboard metrics: Animated counters, trend charts
+- Calendar: Visual time slots, not dropdowns
+- Lead cards: Temperature indicators with color/animation
+
+---
+
+## Common Pitfalls to Avoid
+
+**1. Don't Ask for Email Too Early**
+- ❌ BAD: Ask email from cold/warm leads
+- ✅ GOOD: Only ask email from HOT leads or when explicitly needed
+
+**2. Don't Offer Invalid Slots**
+- ❌ BAD: Let AI suggest times without checking calendar
+- ✅ GOOD: Always call check_calendar first
+
+**3. Don't Lose Context**
+- ❌ BAD: Store state in memory only
+- ✅ GOOD: Persist everything to database
+
+**4. Don't Leave Users Hanging**
+- ❌ BAD: Return empty response on error
+- ✅ GOOD: Always provide fallback message
+
+**5. Don't Mix Timezones**
+- ❌ BAD: Convert to user timezone
+- ✅ GOOD: All times in business timezone (simplified)
+
+---
+
+## File-Specific Rules
+
+### `src/lib/ai/agent.ts`
+- Main orchestrator, handles recursive tool calls
+- MUST implement second follow-up call pattern
+- MUST handle tool failures gracefully
+- MUST log all AI interactions
+
+### `src/lib/ai/tools/update-lead.ts`
+- ONLY collect email for HOT leads
+- Calculate lead score on every update
+- Trigger follow-ups based on temperature
+- Log all parameter changes
+
+### `src/lib/ai/tools/check-calendar.ts`
+- Return real slots from database
+- Filter by business hours
+- Store last_offered_slots in conversation metadata
+- Handle empty results gracefully
+
+### `src/lib/ai/tools/book-appointment.ts`
+- VALIDATE against last_offered_slots
+- Check for conflicts
+- Update lead temperature to 'booked'
+- Send confirmation message
+
+### `src/lib/services/twilio/client.ts`
+- Verify webhook signatures (security)
+- Handle media messages
+- Retry failed sends
+- Rate limit handling
+
+---
+
+## Performance Targets
+
+- **Response Time:** < 10 seconds (end-to-end)
+- **AI Success Rate:** > 95% (tool calling)
+- **Tool Execution:** > 95% success rate
+- **Empty Responses:** < 5%
+- **Database Queries:** < 5 per conversation turn
+- **Uptime:** 99.9%
+
+---
+
+## Recent Improvements Reference
+
+**March 2, 2026 (Commit 5011f55):**
+- ✅ Fixed recursive tool call handling
+- ✅ Added second follow-up call pattern
+- ✅ Empty response issue resolved
+- 📈 Result: 95%+ multi-step tool success rate
+
+**March 3, 2026:**
+- ✅ Removed redundant tool instructions
+- ✅ Clarified email collection timing
+- ✅ Added empty slot handling
+- ✅ Optimized debug logging
+- 📈 Result: 20-30% token reduction
+
+**March 7, 2026:**
+- ✅ Enhanced tool parameter logging
+- ✅ Optimized contact reload (only when needed)
+- 📈 Result: 50% reduction in DB queries
+
+---
+
+## Emergency Procedures
+
+**If Calendar System Down:**
+1. Detect failure in check_calendar tool
+2. Fallback: Collect preferred times manually
+3. Notify human agent to book manually
+4. Update conversation status to 'needs_manual_booking'
+
+**If AI Provider Down:**
+1. Detect API failure
+2. Fallback to secondary provider (Claude → GPT or vice versa)
+3. If both down, queue messages for later processing
+4. Send user: "We're experiencing high load. We'll respond shortly."
+
+**If Database Down:**
+1. Return 503 Service Unavailable
+2. Queue incoming webhooks
+3. Alert on-call engineer
+4. Don't lose messages
+
+---
+
+**END OF RULES**
+
+When in doubt, prioritize:
+1. User experience (never leave them hanging)
+2. Data integrity (persist everything)
+3. Reliability (graceful degradation)
+4. Performance (optimize database queries)
+
+Consult COMPLETE_SYSTEM_DOCUMENTATION.md for detailed architecture reference.

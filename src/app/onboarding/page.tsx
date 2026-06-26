@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Building2, MessageSquare, Bot, Calendar, Bell, CheckCircle,
-  ChevronRight, ChevronLeft, Loader2, Copy, Check, Sparkles,
+  Building2, Bot, Calendar, Bell, CheckCircle,
+  ChevronLeft, ChevronDown, Loader2, Sparkles, Send,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-browser';
 
@@ -16,30 +16,37 @@ interface OnboardingData {
   tenant: any;
 }
 
+interface ChatMsg {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// WhatsApp/Twilio connection is intentionally NOT one of these steps — it's
+// decoupled from onboarding completion (see /dashboard/settings's WhatsApp
+// tab) since the customer's own Twilio account creation/verification can
+// take 24-48hrs and must not block the rest of setup.
 const STEPS = [
   { id: 'business_profile', name: 'Business Profile', icon: Building2, description: 'Tell us about your business' },
-  { id: 'twilio_setup', name: 'WhatsApp Setup', icon: MessageSquare, description: 'Connect your WhatsApp Business' },
   { id: 'ai_config', name: 'AI Configuration', icon: Bot, description: 'Customize your AI assistant' },
   { id: 'calendar_setup', name: 'Calendar', icon: Calendar, description: 'Connect your calendar (optional)' },
   { id: 'handoff_setup', name: 'Notifications', icon: Bell, description: 'Set up handoff alerts' },
 ];
+
+// Brand colors for the dual-panel onboarding experience (live preview side).
+const NAVY = '#0A1628';
+const GOLD = '#C9A84C';
 
 export default function OnboardingPage() {
   const router = useRouter();
 
   const [authChecked, setAuthChecked] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const [businessProfile, setBusinessProfile] = useState({
     company_name: '', business_type: '', business_description: '',
     target_audience: '', products_services: '', timezone: 'UTC',
-  });
-  const [twilioSetup, setTwilioSetup] = useState({
-    twilio_account_sid: '', twilio_auth_token: '', twilio_whatsapp_number: '',
   });
   const [aiConfig, setAiConfig] = useState({
     ai_personality: 'professional', ai_language: 'en',
@@ -51,8 +58,6 @@ export default function OnboardingPage() {
   });
   const [gcalConnected, setGcalConnected] = useState(false);
   const [gcalEmail, setGcalEmail] = useState('');
-  const [twilioTesting, setTwilioTesting] = useState(false);
-  const [twilioTestResult, setTwilioTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [businessHours, setBusinessHours] = useState({
     monday:    { open: '09:00', close: '18:00', closed: false },
@@ -63,6 +68,21 @@ export default function OnboardingPage() {
     saturday:  { open: '09:00', close: '18:00', closed: false },
     sunday:    { open: '09:00', close: '18:00', closed: true },
   });
+
+  // ── Dual-panel Onboarding Agent state ──────────────────────────────────
+  // livePreviewTenant mirrors the tenants row for the left-hand live preview.
+  // It's seeded from /api/onboarding's GET and then kept fresh via Supabase
+  // Realtime (tenants RLS already scopes subscriptions to the caller's own
+  // tenant — see "Tenant access" policy in schema.sql — so no new policy
+  // is needed for this subscription).
+  const [livePreviewTenant, setLivePreviewTenant] = useState<any>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([
+    { role: 'assistant', content: "Hi! I'm Maya's setup assistant 👋 Let's get your AI sales assistant configured. To start — what's your business called, and what does it do?" },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const [chatDone, setChatDone] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // Step 1: verify Supabase session
   useEffect(() => {
@@ -80,6 +100,25 @@ export default function OnboardingPage() {
     if (!authChecked) return;
     fetchOnboardingStatus();
   }, [authChecked]);
+
+  // Step 3: subscribe to live tenant changes for the left preview panel.
+  useEffect(() => {
+    if (!authChecked) return;
+    const channel = supabase
+      .channel('onboarding-tenant-preview')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tenants' }, (payload) => {
+        setLivePreviewTenant((prev: any) => ({ ...(prev || {}), ...(payload.new || {}) }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authChecked]);
+
+  useEffect(() => {
+    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [chatMessages]);
 
   async function fetchOnboardingStatus() {
     try {
@@ -116,6 +155,7 @@ export default function OnboardingPage() {
             recipients: data.tenant.handoff_settings.recipients || { email: '', whatsapp: '', telegram_chat_id: '' },
           });
         }
+        setLivePreviewTenant((prev: any) => ({ ...(prev || {}), ...data.tenant }));
       }
 
       // Only redirect to dashboard if setup is completed
@@ -129,57 +169,78 @@ export default function OnboardingPage() {
     }
   }
 
-  async function saveStepData(stepIndex: number, data: any) {
-    setSaving(true);
-    try {
-      const response = await fetch('/api/onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: stepIndex, data, action: 'update_step' }),
-      });
-      if (!response.ok) throw new Error('Failed to save');
-      return true;
-    } catch (error) {
-      console.error('Error saving step:', error);
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleNext() {
-    let stepData: any;
-    switch (currentStep) {
-      case 0: stepData = businessProfile; break;
-      case 1: stepData = twilioSetup; break;
-      case 2: stepData = aiConfig; break;
-      case 3: stepData = { business_hours: businessHours }; break;
-      case 4: stepData = { handoff_settings: handoffSetup }; break;
-    }
-
-    const saved = await saveStepData(currentStep, stepData);
-    if (!saved) return;
-
-    if (currentStep < STEPS.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      await fetch('/api/onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'complete_onboarding' }),
-      });
-      router.push('/dashboard');
-    }
-  }
-
   function handleBack() {
     if (currentStep > 0) setCurrentStep(currentStep - 1);
   }
 
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // Bumps the wizard's onboarding_step on the server (same column /api/onboarding
+  // already tracks) without touching any other field, then advances locally.
+  // This is how the Onboarding Agent "drives" the wizard instead of the user
+  // clicking Continue — triggered from sendChatMessage() based on which tool
+  // the agent just called.
+  async function advanceStepProgrammatically(nextStep: number) {
+    setCurrentStep(nextStep);
+    try {
+      await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: nextStep, data: {}, action: 'update_step' }),
+      });
+    } catch (err) {
+      console.error('Failed to sync auto-advanced step:', err);
+    }
+  }
+
+  async function sendChatMessage(text: string) {
+    if (!text.trim() || chatSending || chatDone) return;
+    const nextMessages: ChatMsg[] = [...chatMessages, { role: 'user', content: text.trim() }];
+    setChatMessages(nextMessages);
+    setChatInput('');
+    setChatSending(true);
+
+    try {
+      const res = await fetch('/api/onboarding/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: "Sorry, something went wrong on my end — could you try that again?" }]);
+        return;
+      }
+
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.message || '...' }]);
+
+      const calledTools: string[] = (data.toolCalls || []).map((t: any) => t.name);
+
+      // Re-sync the live preview + local mirrors so anything the agent just
+      // wrote via Supabase shows up immediately, even ahead of the Realtime push.
+      if (calledTools.length > 0) {
+        fetchOnboardingStatus();
+      }
+
+      // Agent-driven step progression — see advanceStepProgrammatically() above.
+      // Indices: 0 business_profile, 1 ai_config, 2 calendar_setup, 3 handoff_setup.
+      if (currentStep === 0 && calledTools.includes('update_business_profile')) {
+        advanceStepProgrammatically(1);
+      } else if (currentStep === 1 && calledTools.includes('update_ai_preferences')) {
+        advanceStepProgrammatically(2);
+      } else if (currentStep === 2 && calledTools.includes('set_business_hours')) {
+        advanceStepProgrammatically(3);
+      }
+
+      if (data.setup_completed) {
+        setChatDone(true);
+        setTimeout(() => router.push('/dashboard'), 1800);
+      }
+    } catch (error) {
+      console.error('Onboarding chat error:', error);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: "Sorry, something went wrong on my end — could you try that again?" }]);
+    } finally {
+      setChatSending(false);
+    }
   }
 
   // Show spinner while checking auth or loading data
@@ -191,14 +252,9 @@ export default function OnboardingPage() {
     );
   }
 
-  const CurrentStepIcon = STEPS[currentStep].icon;
-  const webhookUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/webhook/twilio`
-    : 'https://concierge.fixeraitech.com/api/webhook/twilio';
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-4xl mx-auto py-8 px-4">
+      <div className="max-w-6xl mx-auto py-8 px-4">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-4">
             <Sparkles className="h-4 w-4" />
@@ -206,6 +262,7 @@ export default function OnboardingPage() {
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Let's set up your AI assistant</h1>
           <p className="text-gray-600 mt-2">Complete these steps to start automating your sales conversations</p>
+          <p className="text-sm text-gray-500 mt-1">You'll connect your WhatsApp number afterward, from Settings — no need to have it ready now.</p>
         </div>
 
         {/* Progress Steps */}
@@ -234,378 +291,25 @@ export default function OnboardingPage() {
           })}
         </div>
 
-        {/* Step Content */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <CurrentStepIcon className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">{STEPS[currentStep].name}</h2>
-              <p className="text-gray-500">{STEPS[currentStep].description}</p>
-            </div>
+        {/* Step Content — every step is dual-panel: live preview (left) +
+            Onboarding Agent chat (right). Twilio/WhatsApp connection lives
+            in Settings post-onboarding, not here. */}
+        <div className="rounded-2xl shadow-xl overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 min-h-[640px]">
+            <BusinessPreviewPanel tenant={livePreviewTenant} />
+            <OnboardingChatPanel
+              messages={chatMessages}
+              input={chatInput}
+              onInputChange={setChatInput}
+              sending={chatSending}
+              done={chatDone}
+              onSend={sendChatMessage}
+              scrollRef={chatScrollRef}
+            />
           </div>
 
-          {/* Step 0: Business Profile */}
-          {currentStep === 0 && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
-                <input type="text" value={businessProfile.company_name}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, company_name: e.target.value })}
-                  placeholder="Acme Inc." className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Business Type *</label>
-                <select value={businessProfile.business_type}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, business_type: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select your business type</option>
-                  <option value="ecommerce">E-commerce / Retail</option>
-                  <option value="saas">SaaS / Software</option>
-                  <option value="services">Professional Services</option>
-                  <option value="healthcare">Healthcare</option>
-                  <option value="real_estate">Real Estate</option>
-                  <option value="education">Education</option>
-                  <option value="hospitality">Hospitality / Travel</option>
-                  <option value="finance">Finance / Insurance</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Business Description *</label>
-                <textarea value={businessProfile.business_description}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, business_description: e.target.value })}
-                  placeholder="Describe what your business does..." rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                <input type="text" value={businessProfile.target_audience}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, target_audience: e.target.value })}
-                  placeholder="e.g., Small business owners, Enterprise companies"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Products/Services</label>
-                <textarea value={businessProfile.products_services}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, products_services: e.target.value })}
-                  placeholder="List your main products or services..." rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
-                <select value={businessProfile.timezone}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, timezone: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">Eastern Time (US)</option>
-                  <option value="America/Chicago">Central Time (US)</option>
-                  <option value="America/Denver">Mountain Time (US)</option>
-                  <option value="America/Los_Angeles">Pacific Time (US)</option>
-                  <option value="Europe/London">London (GMT)</option>
-                  <option value="Europe/Paris">Paris (CET)</option>
-                  <option value="Asia/Dubai">Dubai (GST)</option>
-                  <option value="Asia/Kolkata">India (IST)</option>
-                  <option value="Asia/Singapore">Singapore (SGT)</option>
-                  <option value="Australia/Sydney">Sydney (AEST)</option>
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Step 1: Twilio Setup */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h3 className="font-medium text-blue-900 mb-2">📱 WhatsApp Business Setup Guide</h3>
-                <ol className="text-sm text-blue-800 space-y-2">
-                  <li>1. Go to <a href="https://www.twilio.com/console" target="_blank" rel="noopener" className="underline">Twilio Console</a> and create an account</li>
-                  <li>2. Navigate to Messaging → Try it out → Send a WhatsApp message</li>
-                  <li>3. Follow the sandbox setup instructions</li>
-                  <li>4. Copy your credentials below</li>
-                </ol>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Twilio Account SID *</label>
-                <input type="text" value={twilioSetup.twilio_account_sid}
-                  onChange={(e) => setTwilioSetup({ ...twilioSetup, twilio_account_sid: e.target.value })}
-                  placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Twilio Auth Token *</label>
-                <input type="password" value={twilioSetup.twilio_auth_token}
-                  onChange={(e) => setTwilioSetup({ ...twilioSetup, twilio_auth_token: e.target.value })}
-                  placeholder="Your auth token"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number *</label>
-                <input type="text" value={twilioSetup.twilio_whatsapp_number}
-                  onChange={(e) => setTwilioSetup({ ...twilioSetup, twilio_whatsapp_number: e.target.value })}
-                  placeholder="+14155238886 (Twilio sandbox number)"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-              </div>
-              {/* Test Connection Button */}
-              <div>
-                <button
-                  type="button"
-                  disabled={twilioTesting || !twilioSetup.twilio_account_sid || !twilioSetup.twilio_auth_token}
-                  onClick={async () => {
-                    setTwilioTesting(true);
-                    setTwilioTestResult(null);
-                    try {
-                      const res = await fetch('/api/onboarding/test-twilio', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(twilioSetup),
-                      });
-                      const data = await res.json();
-                      setTwilioTestResult(data);
-                    } catch {
-                      setTwilioTestResult({ success: false, message: 'Network error' });
-                    } finally {
-                      setTwilioTesting(false);
-                    }
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                >
-                  {twilioTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                  {twilioTesting ? 'Testing...' : 'Test Connection'}
-                </button>
-                {twilioTestResult && (
-                  <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
-                    twilioTestResult.success
-                      ? 'bg-green-50 border border-green-200 text-green-800'
-                      : 'bg-red-50 border border-red-200 text-red-800'
-                  }`}>
-                    {twilioTestResult.message}
-                  </div>
-                )}
-                {twilioTestResult && !twilioTestResult.success && (
-                  <p className="text-xs text-yellow-700 mt-2">You can still proceed, but messages won't work until credentials are valid.</p>
-                )}
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h3 className="font-medium text-yellow-900 mb-2">⚠️ Important: Configure Webhook URL</h3>
-                <p className="text-sm text-yellow-800 mb-3">In your Twilio Console, set the webhook URL to:</p>
-                <div className="flex items-center gap-2 bg-white rounded-lg p-3 border">
-                  <code className="flex-1 text-sm text-gray-800 break-all">{webhookUrl}</code>
-                  <button onClick={() => copyToClipboard(webhookUrl)} className="p-2 hover:bg-gray-100 rounded">
-                    {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-500" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: AI Configuration */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">AI Personality</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { value: 'professional', label: 'Professional', desc: 'Formal and business-like' },
-                    { value: 'friendly', label: 'Friendly', desc: 'Warm and approachable' },
-                    { value: 'casual', label: 'Casual', desc: 'Relaxed and conversational' },
-                  ].map((option) => (
-                    <button key={option.value} type="button"
-                      onClick={() => setAiConfig({ ...aiConfig, ai_personality: option.value })}
-                      className={`p-4 border-2 rounded-lg text-left transition-colors ${
-                        aiConfig.ai_personality === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}>
-                      <div className="font-medium text-gray-900">{option.label}</div>
-                      <div className="text-xs text-gray-500">{option.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Primary Language</label>
-                <select value={aiConfig.ai_language} onChange={(e) => setAiConfig({ ...aiConfig, ai_language: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
-                  <option value="pt">Portuguese</option>
-                  <option value="ar">Arabic</option>
-                  <option value="zh">Chinese</option>
-                  <option value="hi">Hindi</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Welcome Greeting *</label>
-                <textarea value={aiConfig.ai_greeting} onChange={(e) => setAiConfig({ ...aiConfig, ai_greeting: e.target.value })}
-                  placeholder={`Hi! 👋 Welcome to ${businessProfile.company_name || '[Your Company]'}. I'm your AI assistant. How can I help you today?`}
-                  rows={3} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fallback Message</label>
-                <textarea value={aiConfig.ai_fallback_message} onChange={(e) => setAiConfig({ ...aiConfig, ai_fallback_message: e.target.value })}
-                  placeholder="I'm not sure I understand. Could you please rephrase that?"
-                  rows={2} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Calendar Setup */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              {/* Section A: Google Calendar Connect */}
-              <div className="border border-gray-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Google Calendar (Optional)</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Connect Google Calendar to sync appointments automatically and avoid double-booking.
-                </p>
-                {gcalConnected ? (
-                  <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
-                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-green-800 font-medium">Google Calendar connected</p>
-                      {gcalEmail && <p className="text-green-700 text-sm">{gcalEmail}</p>}
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { window.location.href = '/api/auth/google-calendar'; }}
-                    className="inline-flex items-center gap-2 px-5 py-3 bg-white border-2 border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
-                  >
-                    <svg className="h-5 w-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                    Connect Google Calendar
-                  </button>
-                )}
-                <p className="text-xs text-gray-500 mt-3">
-                  If you skip this, the built-in calendar will be used instead.
-                </p>
-              </div>
-
-              {/* Section B: Business Hours */}
-              <div className="border border-gray-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Business Hours</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Set your available hours so the AI only offers appointments during these times.
-                </p>
-                <div className="space-y-3">
-                  {(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const).map((day) => (
-                    <div key={day} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-28 capitalize font-medium text-gray-700">{day}</div>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-// @ts-ignore
-                          checked={!businessHours[day].closed}
-                          onChange={(e) => setBusinessHours(prev => ({
-                            ...prev,
-// @ts-ignore
-                            [day]: { ...prev[day], closed: !e.target.checked }
-                          }))}
-                          className="h-4 w-4 text-blue-600 rounded"
-                        />
-                        <span className="text-sm text-gray-600">Open</span>
-                      </label>
-// @ts-ignore
-                      {!businessHours[day].closed && (
-                        <>
-                          <input
-                            type="time"
-// @ts-ignore
-                            value={businessHours[day].open}
-                            onChange={(e) => setBusinessHours(prev => ({
-                              ...prev,
-// @ts-ignore
-                              [day]: { ...prev[day], open: e.target.value }
-                            }))}
-                            className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                          />
-                          <span className="text-gray-500">to</span>
-                          <input
-                            type="time"
-// @ts-ignore
-                            value={businessHours[day].close}
-                            onChange={(e) => setBusinessHours(prev => ({
-                              ...prev,
-// @ts-ignore
-                              [day]: { ...prev[day], close: e.target.value }
-                            }))}
-                            className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                          />
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Handoff Setup */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-orange-800">Configure how you want to be notified when the AI needs human assistance.</p>
-              </div>
-              <div className="space-y-4">
-                <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-                  <div className="flex items-center gap-3">
-                    <MessageSquare className="h-5 w-5 text-blue-600" />
-                    <div>
-                      <p className="font-medium text-gray-900">Dashboard Alerts</p>
-                      <p className="text-sm text-gray-500">Real-time notifications in your dashboard</p>
-                    </div>
-                  </div>
-                  <input type="checkbox" checked={handoffSetup.channels.dashboard}
-                    onChange={(e) => setHandoffSetup({ ...handoffSetup, channels: { ...handoffSetup.channels, dashboard: e.target.checked } })}
-                    className="h-5 w-5 text-blue-600 rounded" />
-                </label>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <Bell className="h-5 w-5 text-green-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">Email Notifications</p>
-                        <p className="text-sm text-gray-500">Detailed alerts with conversation summary</p>
-                      </div>
-                    </div>
-                    <input type="checkbox" checked={handoffSetup.channels.email}
-                      onChange={(e) => setHandoffSetup({ ...handoffSetup, channels: { ...handoffSetup.channels, email: e.target.checked } })}
-                      className="h-5 w-5 text-blue-600 rounded" />
-                  </label>
-                  {handoffSetup.channels.email && (
-                    <input type="email" value={handoffSetup.recipients.email}
-                      onChange={(e) => setHandoffSetup({ ...handoffSetup, recipients: { ...handoffSetup.recipients, email: e.target.value } })}
-                      placeholder="your@email.com" className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                  )}
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <MessageSquare className="h-5 w-5 text-emerald-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">WhatsApp Notifications</p>
-                        <p className="text-sm text-gray-500">Instant alerts to your WhatsApp</p>
-                      </div>
-                    </div>
-                    <input type="checkbox" checked={handoffSetup.channels.whatsapp}
-                      onChange={(e) => setHandoffSetup({ ...handoffSetup, channels: { ...handoffSetup.channels, whatsapp: e.target.checked } })}
-                      className="h-5 w-5 text-blue-600 rounded" />
-                  </label>
-                  {handoffSetup.channels.whatsapp && (
-                    <input type="tel" value={handoffSetup.recipients.whatsapp}
-                      onChange={(e) => setHandoffSetup({ ...handoffSetup, recipients: { ...handoffSetup.recipients, whatsapp: e.target.value } })}
-                      placeholder="+1234567890" className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Navigation */}
-          <div className="flex justify-between mt-8 pt-6 border-t">
+          <div className="flex justify-between mt-8 pt-6 border-t px-8 pb-8">
             <button onClick={handleBack} disabled={currentStep === 0}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
                 currentStep === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'
@@ -613,16 +317,7 @@ export default function OnboardingPage() {
               <ChevronLeft className="h-4 w-4" />
               Back
             </button>
-            <button onClick={handleNext} disabled={saving}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : currentStep === STEPS.length - 1 ? (
-                <><span>Complete Setup</span><CheckCircle className="h-4 w-4" /></>
-              ) : (
-                <><span>Continue</span><ChevronRight className="h-4 w-4" /></>
-              )}
-            </button>
+            <span className="text-sm text-gray-400 italic self-center">Maya will move you to the next step automatically</span>
           </div>
         </div>
 
@@ -631,6 +326,197 @@ export default function OnboardingPage() {
             Skip setup and go to dashboard →
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Left panel — live business profile preview, populated from the tenants
+// row (initial fetch + Supabase Realtime). Sections render as skeleton
+// placeholders until data arrives, then animate in.
+// ─────────────────────────────────────────────────────────────────────────
+function BusinessPreviewPanel({ tenant }: { tenant: any }) {
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const t = tenant || {};
+
+  const businessTypeLabels: Record<string, string> = {
+    ecommerce: 'E-commerce / Retail', saas: 'SaaS / Software', services: 'Professional Services',
+    healthcare: 'Healthcare', real_estate: 'Real Estate', automotive: 'Automotive',
+    home_services: 'Home Services', mortgage: 'Mortgage / Lending', dental: 'Dental',
+    recruitment: 'Recruitment / Staffing', education: 'Education', hospitality: 'Hospitality / Travel',
+    finance: 'Finance / Insurance', other: 'Other',
+  };
+
+  const hasIdentity = !!(t.company_name || t.business_type || t.business_description);
+  const greeting = t.ai_greeting || t.agent_config?.greeting_message;
+  const qualification: string[] = t.onboarding_data?.qualification_priorities
+    || (t.agent_config?.qualification_stages || []).map((s: any) => s.name || s.label).filter(Boolean);
+  const hours = t.business_hours;
+  const generatedPrompt = t.generated_prompt || t.agent_config?.system_prompt;
+
+  return (
+    <div className="p-8 text-white overflow-y-auto" style={{ backgroundColor: NAVY }}>
+      <div className="flex items-center gap-2 mb-8">
+        <Sparkles className="h-5 w-5" style={{ color: GOLD }} />
+        <span className="text-sm font-semibold tracking-wide uppercase" style={{ color: GOLD }}>Live Preview</span>
+      </div>
+
+      {/* Business Identity */}
+      <PreviewSection title="Business Identity" ready={hasIdentity}>
+        {hasIdentity ? (
+          <div className="space-y-1.5">
+            <p className="text-lg font-semibold">{t.company_name || 'Your business'}</p>
+            {t.business_type && (
+              <span className="inline-block text-xs px-2 py-1 rounded-full bg-white/10" style={{ color: GOLD }}>
+                {businessTypeLabels[t.business_type] || t.business_type}
+              </span>
+            )}
+            {t.business_description && <p className="text-sm text-white/70 mt-2">{t.business_description}</p>}
+            {t.products_services && <p className="text-sm text-white/60 mt-1"><span className="text-white/40">Offers: </span>{t.products_services}</p>}
+            {t.target_audience && <p className="text-sm text-white/60"><span className="text-white/40">For: </span>{t.target_audience}</p>}
+          </div>
+        ) : null}
+      </PreviewSection>
+
+      {/* Maya's Greeting — WhatsApp bubble */}
+      <PreviewSection title="Maya's Greeting" ready={!!greeting}>
+        {greeting && (
+          <div className="bg-[#DCF8C6] text-gray-900 rounded-lg rounded-tl-none px-4 py-3 max-w-[85%] text-sm shadow-md relative">
+            {greeting}
+            <span className="block text-[10px] text-gray-500 mt-1 text-right">✓✓ Maya</span>
+          </div>
+        )}
+      </PreviewSection>
+
+      {/* Qualification Focus */}
+      <PreviewSection title="Qualification Focus" ready={qualification.length > 0}>
+        {qualification.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {qualification.map((q, i) => (
+              <span key={i} className="text-xs px-3 py-1.5 rounded-full border" style={{ borderColor: GOLD, color: GOLD }}>
+                {q}
+              </span>
+            ))}
+          </div>
+        )}
+      </PreviewSection>
+
+      {/* Availability */}
+      <PreviewSection title="Availability" ready={!!hours}>
+        {hours && (
+          <div className="space-y-1 text-sm text-white/70">
+            {Object.entries(hours).slice(0, 7).map(([day, h]: [string, any]) => (
+              <div key={day} className="flex justify-between border-b border-white/5 py-1">
+                <span className="capitalize">{day}</span>
+                <span>{h.closed ? 'Closed' : `${h.open} – ${h.close}`}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </PreviewSection>
+
+      {/* Collapsible Maya Prompt Preview */}
+      <div className="mt-6">
+        <button
+          onClick={() => setPromptExpanded(!promptExpanded)}
+          disabled={!generatedPrompt}
+          className="flex items-center justify-between w-full text-left text-sm font-medium text-white/80 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <span>Maya Prompt Preview</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${promptExpanded ? 'rotate-180' : ''}`} />
+        </button>
+        {promptExpanded && generatedPrompt && (
+          <pre className="mt-3 text-[11px] leading-relaxed text-white/60 bg-black/30 rounded-lg p-3 max-h-64 overflow-y-auto whitespace-pre-wrap">
+            {generatedPrompt}
+          </pre>
+        )}
+        {!generatedPrompt && (
+          <p className="text-xs text-white/30 mt-2">Generated once setup is complete.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PreviewSection({ title, ready, children }: { title: string; ready: boolean; children: React.ReactNode }) {
+  return (
+    <div className="mb-7">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-white/40 mb-2">{title}</h3>
+      {ready ? (
+        <div className="animate-[fadeIn_0.4s_ease-in-out]">{children}</div>
+      ) : (
+        <div className="space-y-2 animate-pulse">
+          <div className="h-3 bg-white/10 rounded w-3/4" />
+          <div className="h-3 bg-white/5 rounded w-1/2" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Right panel — Onboarding Agent chat. Posts the full transcript to
+// /api/onboarding/chat each turn (see that route for the tool-calling logic
+// that writes onto the tenants row and ultimately calls generate_maya_config).
+// ─────────────────────────────────────────────────────────────────────────
+function OnboardingChatPanel({
+  messages, input, onInputChange, sending, done, onSend, scrollRef,
+}: {
+  messages: ChatMsg[];
+  input: string;
+  onInputChange: (v: string) => void;
+  sending: boolean;
+  done: boolean;
+  onSend: (text: string) => void;
+  scrollRef: React.RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div className="flex flex-col bg-white">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 min-h-[480px] max-h-[640px]">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+              m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'
+            }`}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 text-gray-500 rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Maya is typing...
+            </div>
+          </div>
+        )}
+        {done && (
+          <div className="flex justify-center">
+            <div className="text-xs px-3 py-1.5 rounded-full" style={{ backgroundColor: `${GOLD}22`, color: '#8a6d1f' }}>
+              Setup complete — heading to your dashboard...
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="border-t p-4 flex items-center gap-2">
+        <input
+          type="text"
+          value={input}
+          disabled={sending || done}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(input); } }}
+          placeholder={done ? 'Setup complete' : 'Type your answer...'}
+          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-full text-sm focus:ring-2 focus:outline-none disabled:opacity-50"
+          style={{ ['--tw-ring-color' as any]: GOLD }}
+        />
+        <button
+          onClick={() => onSend(input)}
+          disabled={sending || done || !input.trim()}
+          className="flex items-center justify-center w-10 h-10 rounded-full disabled:opacity-40 transition-opacity"
+          style={{ backgroundColor: GOLD }}
+        >
+          <Send className="h-4 w-4 text-white" />
+        </button>
       </div>
     </div>
   );
