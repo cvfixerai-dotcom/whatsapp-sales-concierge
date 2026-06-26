@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const [tenantResult, promptResult] = await Promise.all([
       supabaseAdmin
         .from('tenants')
-        .select('ai_personality, ai_language, ai_greeting, ai_fallback_message, qualification_questions, company_name, industry')
+        .select('ai_greeting, company_name, industry, industry_agent_id, agent_config')
         .eq('id', sessionUser.tenantId)
         .single(),
       supabaseAdmin
@@ -40,15 +40,28 @@ export async function GET(request: NextRequest) {
 
     const tenant = tenantResult.data;
 
+    // Did this tenant actually get a tuned agent for its own industry, or did
+    // applyIndustryAgent() (src/lib/services/tenant-initializer.ts) fall back
+    // to the generic "other" row because no industry_agents match existed?
+    // Surface that so the owner isn't left thinking they got a bespoke
+    // configuration when they got the generic one.
+    let usingFallbackIndustry = false;
+    if (tenant.industry && tenant.industry !== 'other' && tenant.industry_agent_id) {
+      const { data: matchedAgent } = await supabaseAdmin
+        .from('industry_agents')
+        .select('industry')
+        .eq('id', tenant.industry_agent_id)
+        .maybeSingle();
+      usingFallbackIndustry = !!matchedAgent && matchedAgent.industry !== tenant.industry;
+    }
+
     return NextResponse.json({
-      ai_personality: tenant.ai_personality || 'professional',
-      ai_language: tenant.ai_language || 'en',
       ai_greeting: tenant.ai_greeting || '',
-      ai_fallback_message: tenant.ai_fallback_message || '',
-      qualification_questions: tenant.qualification_questions || [],
       company_name: tenant.company_name || '',
       industry: tenant.industry || 'other',
+      agent_name: (tenant.agent_config as any)?.agent_name || 'Maya',
       custom_system_prompt: promptResult?.data?.content || '',
+      using_fallback_industry: usingFallbackIndustry,
     });
   } catch (error) {
     console.error('[AI Config] GET error:', error);
@@ -64,17 +77,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { ai_personality, ai_language, ai_greeting, ai_fallback_message, qualification_questions, custom_system_prompt } = body;
+    const { ai_greeting, custom_system_prompt } = body;
 
     const updates: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
 
-    if (ai_personality !== undefined) updates.ai_personality = ai_personality;
-    if (ai_language !== undefined) updates.ai_language = ai_language;
     if (ai_greeting !== undefined) updates.ai_greeting = ai_greeting || null;
-    if (ai_fallback_message !== undefined) updates.ai_fallback_message = ai_fallback_message || null;
-    if (qualification_questions !== undefined) updates.qualification_questions = qualification_questions;
 
     const { error } = await supabaseAdmin
       .from('tenants')

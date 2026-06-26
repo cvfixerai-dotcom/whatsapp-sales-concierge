@@ -39,26 +39,31 @@ export async function GET(request: NextRequest) {
         .limit(5),
     ]);
 
-    // Get last message for each recent conversation
-    const recentConversations = [];
-    for (const conv of recentConvos.data || []) {
-      const { data: msgs } = await supabaseAdmin
-        .from('messages')
-        .select('content')
-        .eq('conversation_id', conv.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
+    // Get last message for each recent conversation in a single query instead
+    // of one round trip per conversation (was up to 5 sequential queries).
+    const recentConvIds = (recentConvos.data || []).map((c: any) => c.id);
+    const { data: recentMsgs } = recentConvIds.length
+      ? await supabaseAdmin
+          .from('messages')
+          .select('conversation_id, content, created_at')
+          .in('conversation_id', recentConvIds)
+          .order('created_at', { ascending: false })
+      : { data: [] as any[] };
 
-      recentConversations.push({
-        id: conv.id,
-// @ts-ignore
-        contact_name: conv.contacts?.name || 'Unknown',
-        last_message: msgs?.[0]?.content || 'No messages',
-// @ts-ignore
-        temperature: conv.contacts?.temperature || 'new',
-        created_at: conv.created_at,
-      });
+    const lastMessageByConv: Record<string, string> = {};
+    for (const m of recentMsgs || []) {
+      if (!(m.conversation_id in lastMessageByConv)) {
+        lastMessageByConv[m.conversation_id] = m.content;
+      }
     }
+
+    const recentConversations = (recentConvos.data || []).map((conv: any) => ({
+      id: conv.id,
+      contact_name: conv.contacts?.name || 'Unknown',
+      last_message: lastMessageByConv[conv.id] || 'No messages',
+      temperature: conv.contacts?.temperature || 'new',
+      created_at: conv.created_at,
+    }));
 
     // Temperature distribution
     const tempCounts = (contactsResult.data || []).reduce((acc: any, c: any) => {

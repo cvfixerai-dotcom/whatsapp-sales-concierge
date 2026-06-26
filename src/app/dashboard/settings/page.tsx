@@ -3,11 +3,11 @@
 import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase-browser';
 import { SkeletonPulse } from '@/components/skeletons';
-import CalendarSettings from './CalendarSettings';
+// CalendarSettings (Google Calendar connect/disconnect) is intentionally not
+// rendered anymore — see note near the Calendar tab below for why.
 import { useRouter, useSearchParams } from 'next/navigation';
 import TeamSection from '@/components/TeamSection';
 import {
-  Calendar,
   Settings,
   CheckCircle,
   AlertCircle,
@@ -27,7 +27,6 @@ import {
   Briefcase,
   HelpCircle,
   Plus,
-  ChevronDown,
   Copy,
   Check,
   Loader2,
@@ -71,13 +70,13 @@ function SettingsPageContent() {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'handoff' | 'ai' | 'templates' | 'team' | 'integrations' | 'business' | 'whatsapp'>('ai');
+  const [activeTab, setActiveTab] = useState<'handoff' | 'ai' | 'templates' | 'team' | 'integrations' | 'business' | 'whatsapp'>('ai');
 
   // Deep-link support — the dashboard's "Connect WhatsApp" reminder banner
   // links to /dashboard/settings?tab=whatsapp.
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['calendar', 'handoff', 'ai', 'templates', 'team', 'integrations', 'business', 'whatsapp'].includes(tab)) {
+    if (tab && ['handoff', 'ai', 'templates', 'team', 'integrations', 'business', 'whatsapp'].includes(tab)) {
       setActiveTab(tab as typeof activeTab);
     }
   }, [searchParams]);
@@ -105,16 +104,19 @@ function SettingsPageContent() {
   const [twilioTestResult, setTwilioTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
   
-  // AI config state
+  // AI config state — ai_greeting and custom_system_prompt are the only two
+  // fields that actually reach the live AI (src/lib/ai/agent.ts). Personality,
+  // language, fallback message, and qualification questions used to be here
+  // too but were dead — written to the DB, never read by the agent — so they
+  // were removed. Tone is now a set of presets that prepend real sentences
+  // into custom_system_prompt instead of writing to a column nothing reads.
   const [savingAi, setSavingAi] = useState(false);
-  const [aiPersonality, setAiPersonality] = useState('professional');
-  const [aiLanguage, setAiLanguage] = useState('en');
   const [aiGreeting, setAiGreeting] = useState('');
-  const [aiFallback, setAiFallback] = useState('');
-  const [qualificationQuestions, setQualificationQuestions] = useState<string[]>([]);
   const [companyName, setCompanyName] = useState('');
   const [customSystemPrompt, setCustomSystemPrompt] = useState('');
   const [industry, setIndustry] = useState('other');
+  const [agentName, setAgentName] = useState('Maya');
+  const [usingFallbackIndustry, setUsingFallbackIndustry] = useState(false);
 
   // Team state
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -259,14 +261,12 @@ function SettingsPageContent() {
       const response = await fetch('/api/settings/ai-config');
       if (!response.ok) throw new Error('Failed to fetch AI config');
       const data = await response.json();
-      setAiPersonality(data.ai_personality || 'professional');
-      setAiLanguage(data.ai_language || 'en');
       setAiGreeting(data.ai_greeting || '');
-      setAiFallback(data.ai_fallback_message || '');
-      setQualificationQuestions(data.qualification_questions || []);
       setCompanyName(data.company_name || '');
       setCustomSystemPrompt(data.custom_system_prompt || '');
       setIndustry(data.industry || 'other');
+      setAgentName(data.agent_name || 'Maya');
+      setUsingFallbackIndustry(!!data.using_fallback_industry);
     } catch (error) {
       console.error('Error fetching AI config:', error);
     }
@@ -281,11 +281,7 @@ function SettingsPageContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ai_personality: aiPersonality,
-          ai_language: aiLanguage,
           ai_greeting: aiGreeting,
-          ai_fallback_message: aiFallback,
-          qualification_questions: qualificationQuestions,
           custom_system_prompt: customSystemPrompt,
         }),
       });
@@ -510,17 +506,6 @@ function SettingsPageContent() {
               AI Configuration
             </button>
             <button
-              onClick={() => setActiveTab('calendar')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'calendar'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Calendar className="inline h-4 w-4 mr-2" />
-              Calendar
-            </button>
-            <button
               onClick={() => setActiveTab('templates')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'templates'
@@ -578,6 +563,17 @@ function SettingsPageContent() {
               <Users className="inline h-4 w-4 mr-2" />
               Team
             </button>
+            <button
+              onClick={() => setActiveTab('integrations')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'integrations'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <ExternalLink className="inline h-4 w-4 mr-2" />
+              Integrations
+            </button>
           </nav>
         </div>
 
@@ -607,11 +603,6 @@ function SettingsPageContent() {
         )}
 
 
-        {/* Calendar Section */}
-        {activeTab === 'calendar' && (
-          <CalendarSettings settings={settings} onRefresh={fetchSettings} />
-        )}
-
         {/* AI Configuration Section */}
         {activeTab === 'ai' && (
           <form onSubmit={handleSaveAiConfig}>
@@ -624,35 +615,43 @@ function SettingsPageContent() {
                 <p className="text-sm text-gray-600 mt-1">Customize your AI assistant&apos;s personality and behavior</p>
               </div>
               <div className="p-6 space-y-6">
+                {usingFallbackIndustry ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="text-sm text-amber-900">
+                      We don&apos;t have a dedicated playbook for <span className="font-medium capitalize">{industry?.replace('-', ' ')}</span> yet,
+                      so <span className="font-medium">{agentName}</span> is running on our general-purpose sales agent instead of an
+                      industry-specific one. It'll still qualify leads and handle objections — just less tailored than a
+                      matched industry would get. Use Custom AI Instructions below to fill in the gaps for your business.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+                    <p className="text-sm text-blue-900">
+                      Your AI assistant (<span className="font-medium">{agentName}</span>) already runs on a
+                      sales playbook tailored to <span className="font-medium capitalize">{industry?.replace('-', ' ') || 'other'}</span> —
+                      qualifying questions, objection handling, and lead scoring are pre-tuned for your industry.
+                      It also detects and replies in whatever language the customer writes in, automatically.
+                      Use the fields below only for what's specific to your business.
+                    </p>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">AI Personality</label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">Tone</label>
+                  <p className="text-xs text-gray-500 mb-3">Adds a tone instruction to your Custom AI Instructions below — you can edit or remove it there.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      { value: 'professional', label: 'Professional', desc: 'Formal and business-like' },
-                      { value: 'friendly', label: 'Friendly', desc: 'Warm and approachable' },
-                      { value: 'casual', label: 'Casual', desc: 'Relaxed and conversational' },
+                      { label: 'Friendly', text: 'Tone: be warm, friendly, and conversational — use a relaxed, approachable voice while staying helpful.' },
+                      { label: 'Professional', text: 'Tone: be formal, polished, and business-like — keep language precise and avoid slang.' },
+                      { label: 'Matter-of-fact', text: 'Tone: be direct and to the point — short sentences, no fluff, just the facts the customer needs.' },
+                      { label: 'Humorous', text: 'Tone: be light and a little playful where appropriate, while staying respectful and useful — humor should never get in the way of helping the customer.' },
                     ].map((o) => (
-                      <button key={o.value} type="button" onClick={() => setAiPersonality(o.value)}
-                        className={`p-4 border-2 rounded-lg text-left transition-colors ${aiPersonality === o.value ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                        <div className="font-medium text-gray-900">{o.label}</div>
-                        <div className="text-xs text-gray-500">{o.desc}</div>
+                      <button key={o.label} type="button"
+                        onClick={() => setCustomSystemPrompt((prev) => `${o.text}\n\n${prev.replace(/^Tone:.*\n\n?/, '')}`.trim())}
+                        className="p-3 border-2 border-gray-200 rounded-lg text-left transition-colors hover:border-purple-300 hover:bg-purple-50">
+                        <div className="font-medium text-sm text-gray-900">{o.label}</div>
                       </button>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Primary Language</label>
-                  <select value={aiLanguage} onChange={(e) => setAiLanguage(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white">
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                    <option value="de">German</option>
-                    <option value="pt">Portuguese</option>
-                    <option value="ar">Arabic</option>
-                    <option value="zh">Chinese</option>
-                    <option value="hi">Hindi</option>
-                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Welcome Greeting</label>
@@ -661,35 +660,11 @@ function SettingsPageContent() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" />
                   <p className="mt-1 text-xs text-gray-500">First message new contacts receive</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fallback Message</label>
-                  <textarea value={aiFallback} onChange={(e) => setAiFallback(e.target.value)} rows={2}
-                    placeholder="I'm not sure I understand. Could you rephrase that?"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" />
-                  <p className="mt-1 text-xs text-gray-500">Used when the AI cannot understand a request</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Qualification Questions</label>
-                  <p className="text-xs text-gray-500 mb-3">Questions the AI asks to qualify leads</p>
-                  <div className="space-y-2">
-                    {qualificationQuestions.map((q, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 w-6">{i + 1}.</span>
-                        <input type="text" value={q} onChange={(e) => { const u = [...qualificationQuestions]; u[i] = e.target.value; setQualificationQuestions(u); }}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" />
-                        <button type="button" onClick={() => setQualificationQuestions(qualificationQuestions.filter((_, idx) => idx !== i))}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"><Trash2 className="h-4 w-4" /></button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => setQualificationQuestions([...qualificationQuestions, ''])}
-                      className="text-sm text-purple-600 hover:text-purple-800 font-medium">+ Add question</button>
-                  </div>
-                </div>
                 <div className="pt-6 border-t border-gray-200">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Custom AI Instructions</label>
                   <p className="text-xs text-gray-500 mb-2">
                     Optional: Add specific instructions for how the AI should sell your product/service.
-                    This overrides the default industry prompt. Describe your offering, pricing, unique selling points, and how to handle common objections.
+                    This is layered on top of the built-in industry playbook — describe your offering, pricing, unique selling points, and how to handle common objections.
                   </p>
                   <textarea
                     value={customSystemPrompt}
@@ -698,22 +673,16 @@ function SettingsPageContent() {
                     placeholder={`Example: We are a premium real estate agency specializing in luxury villas in Dubai Marina. Our price range is AED 2M-15M. Always mention our free property tour service. When customers ask about pricing, offer to schedule a private viewing first. Our key differentiator is our 10-year market expertise and exclusive off-plan deals.`}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white font-mono text-sm"
                   />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Industry: <span className="font-medium capitalize">{industry?.replace('-', ' ') || 'other'}</span> — The AI automatically adapts its sales approach to your industry.
-                  </p>
                 </div>
                 <div className="pt-6 border-t border-gray-200">
                   <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-purple-500" />Preview
                   </h3>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                  <div className="bg-gray-50 rounded-lg p-4">
                     <div className="flex justify-start">
                       <div className="max-w-xs px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900">
                         {aiGreeting || `Hi! Welcome to ${companyName || 'our company'}. How can I help you today?`}
                       </div>
-                    </div>
-                    <div className="text-xs text-gray-400 text-center">
-                      Tone: <span className="font-medium capitalize">{aiPersonality}</span> &middot; Language: <span className="font-medium uppercase">{aiLanguage}</span>
                     </div>
                   </div>
                 </div>

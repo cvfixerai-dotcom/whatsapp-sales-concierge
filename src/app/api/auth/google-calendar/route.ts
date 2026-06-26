@@ -36,8 +36,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the base URL for redirect
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    // Get the base URL for redirect — must match the logic in
+    // /api/auth/google-calendar/callback/route.ts exactly, since Google
+    // requires the redirect_uri at token-exchange time to be identical to
+    // the one used here.
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || request.nextUrl.origin;
     const redirectUri = `${baseUrl}/api/auth/google-calendar/callback`;
 
     // Store tenant ID in state for callback

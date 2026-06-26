@@ -6,10 +6,11 @@ import DashboardShell from './DashboardShell';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // 1. Auth check
-  // Next.js 15: headers() is async and must be awaited
-  const headersList = await headers();
+  // Next.js 15: headers() is async and must be awaited. headers() and the
+  // session lookup are independent, so run them concurrently instead of
+  // back-to-back.
+  const [headersList, sessionUser] = await Promise.all([headers(), getSessionUser()]);
   const pathname = headersList.get('x-pathname') || '';
-  const sessionUser = await getSessionUser();
   if (!sessionUser) redirect('/auth/login');
 
   const { tenantId } = sessionUser;

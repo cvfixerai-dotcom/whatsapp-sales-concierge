@@ -44,30 +44,13 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
 
-  const [businessProfile, setBusinessProfile] = useState({
-    company_name: '', business_type: '', business_description: '',
-    target_audience: '', products_services: '', timezone: 'UTC',
-  });
-  const [aiConfig, setAiConfig] = useState({
-    ai_personality: 'professional', ai_language: 'en',
-    ai_greeting: '', ai_fallback_message: '', qualification_questions: [] as string[],
-  });
-  const [handoffSetup, setHandoffSetup] = useState({
-    channels: { dashboard: true, email: true, whatsapp: false, telegram: false },
-    recipients: { email: '', whatsapp: '', telegram_chat_id: '' },
-  });
-  const [gcalConnected, setGcalConnected] = useState(false);
-  const [gcalEmail, setGcalEmail] = useState('');
-
-  const [businessHours, setBusinessHours] = useState({
-    monday:    { open: '09:00', close: '18:00', closed: false },
-    tuesday:   { open: '09:00', close: '18:00', closed: false },
-    wednesday: { open: '09:00', close: '18:00', closed: false },
-    thursday:  { open: '09:00', close: '18:00', closed: false },
-    friday:    { open: '09:00', close: '18:00', closed: false },
-    saturday:  { open: '09:00', close: '18:00', closed: false },
-    sunday:    { open: '09:00', close: '18:00', closed: true },
-  });
+  // Note: this used to also hold businessProfile, aiConfig, handoffSetup,
+  // businessHours, gcalConnected, and gcalEmail state mirrors here, all set
+  // from /api/onboarding's GET response. None of them were ever read in this
+  // component's JSX or POST bodies — the live preview panel reads from
+  // livePreviewTenant instead, and data collection happens through the chat
+  // flow's tool calls. Removed as dead state (leftover from the old
+  // step-form UI this page used before the chat-driven flow replaced it).
 
   // ── Dual-panel Onboarding Agent state ──────────────────────────────────
   // livePreviewTenant mirrors the tenants row for the left-hand live preview.
@@ -130,31 +113,6 @@ export default function OnboardingPage() {
       setCurrentStep(data.current_step || 0);
 
       if (data.tenant) {
-        setBusinessProfile({
-          company_name: data.tenant.company_name || '',
-          business_type: data.tenant.business_type || '',
-          business_description: data.tenant.business_description || '',
-          target_audience: data.tenant.target_audience || '',
-          products_services: data.tenant.products_services || '',
-          timezone: data.tenant.timezone || 'UTC',
-        });
-        setAiConfig({
-          ai_personality: data.tenant.ai_personality || 'professional',
-          ai_language: data.tenant.ai_language || 'en',
-          ai_greeting: data.tenant.ai_greeting || '',
-          ai_fallback_message: data.tenant.ai_fallback_message || '',
-          qualification_questions: data.tenant.qualification_questions || [],
-        });
-        if (data.tenant.google_calendar_connected) {
-          setGcalConnected(true);
-          setGcalEmail(data.tenant.google_calendar_id || '');
-        }
-        if (data.tenant.handoff_settings) {
-          setHandoffSetup({
-            channels: data.tenant.handoff_settings.channels || { dashboard: true, email: true, whatsapp: false, telegram: false },
-            recipients: data.tenant.handoff_settings.recipients || { email: '', whatsapp: '', telegram_chat_id: '' },
-          });
-        }
         setLivePreviewTenant((prev: any) => ({ ...(prev || {}), ...data.tenant }));
       }
 

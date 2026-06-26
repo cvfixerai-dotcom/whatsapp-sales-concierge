@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase-browser';
 import { DashboardSkeleton } from '@/components/skeletons';
-import { useRouter } from 'next/navigation';
 import {
   LineChart,
   Line,
@@ -63,10 +61,10 @@ interface Booking {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 export default function Dashboard() {
-  const [_authReady, setAuthReady] = useState(false);
-  useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => { if (user) setAuthReady(true); }); }, []);
-  const status = _authReady ? 'authenticated' : 'loading';
-  const router = useRouter();
+  // Auth is already enforced server-side by dashboard/layout.tsx (redirects to
+  // /auth/login before this component ever renders), so there's no need to
+  // re-check it client-side — that was an extra round trip before any data
+  // fetching could start.
   const [loading, setLoading] = useState(true);
   const [kpiData, setKpiData] = useState<KPICard[]>([]);
   const [conversationData, setConversationData] = useState<any[]>([]);
@@ -78,16 +76,10 @@ export default function Dashboard() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
-    if (_authReady) {
-      checkOnboardingStatus();
-      fetchDashboardData();
-      setupRealtimeSubscription();
-    }
-  }, [_authReady]);
-
-  const checkOnboardingStatus = async () => {
-    // Onboarding check is handled by the API route
-  };
+    fetchDashboardData();
+    const cleanup = setupRealtimeSubscription();
+    return cleanup;
+  }, []);
 
   const fetchDashboardData = async () => {
 
@@ -152,15 +144,39 @@ export default function Dashboard() {
   };
 
   const setupRealtimeSubscription = () => {
-    // Poll every 30 seconds instead of realtime (realtime needs RLS auth)
-    const interval = setInterval(() => {
-      fetchDashboardData();
-    }, 30000);
+    // Poll instead of realtime (realtime needs RLS auth), but only while the
+    // tab is actually visible — no point hitting the DB every 30s for a
+    // background tab nobody is looking at. Refresh immediately when the tab
+    // becomes visible again instead of waiting for the next tick.
+    let interval: ReturnType<typeof setInterval> | null = null;
 
+    const startPolling = () => {
+      if (interval) return;
+      interval = setInterval(fetchDashboardData, 60000);
+    };
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboardData();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    if (document.visibilityState === 'visible') startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     setIsLive(true);
 
     return () => {
-      clearInterval(interval);
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       setIsLive(false);
     };
   };

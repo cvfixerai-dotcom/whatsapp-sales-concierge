@@ -12,7 +12,16 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
  * GET /api/auth/google-calendar/callback
  * Handles OAuth callback from Google
  */
+// Must match the base URL logic in /api/auth/google-calendar/route.ts exactly —
+// Google requires the redirect_uri sent during the token exchange to be
+// byte-identical to the one used in the initial authorization request.
+function getBaseUrl(request: NextRequest): string {
+  return process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || request.nextUrl.origin;
+}
+
 export async function GET(request: NextRequest) {
+  const baseUrl = getBaseUrl(request);
+
   try {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
@@ -22,13 +31,13 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('[Google Calendar Callback] OAuth error:', error);
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/dashboard/settings?error=google_oauth_denied`
+        `${baseUrl}/dashboard/settings?tab=calendar&error=google_oauth_denied`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/dashboard/settings?error=missing_params`
+        `${baseUrl}/dashboard/settings?tab=calendar&error=missing_params`
       );
     }
 
@@ -38,7 +47,7 @@ export async function GET(request: NextRequest) {
       stateData = JSON.parse(Buffer.from(state, 'base64').toString());
     } catch {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/dashboard/settings?error=invalid_state`
+        `${baseUrl}/dashboard/settings?tab=calendar&error=invalid_state`
       );
     }
 
@@ -47,7 +56,14 @@ export async function GET(request: NextRequest) {
     // Exchange code for tokens
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
+
+    if (!clientId || !clientSecret) {
+      console.error('[Google Calendar Callback] Missing GOOGLE_CLIENT_ID/SECRET env vars');
+      return NextResponse.redirect(
+        `${baseUrl}/dashboard/settings?tab=calendar&error=oauth_not_configured`
+      );
+    }
+
     const redirectUri = `${baseUrl}/api/auth/google-calendar/callback`;
 
     const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
@@ -56,8 +72,8 @@ export async function GET(request: NextRequest) {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        client_id: clientId!,
-        client_secret: clientSecret!,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
         grant_type: 'authorization_code',
         redirect_uri: redirectUri,
@@ -68,7 +84,7 @@ export async function GET(request: NextRequest) {
       const errorText = await tokenResponse.text();
       console.error('[Google Calendar Callback] Token exchange failed:', errorText);
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/dashboard/settings?error=token_exchange_failed`
+        `${baseUrl}/dashboard/settings?tab=calendar&error=token_exchange_failed`
       );
     }
 
@@ -78,7 +94,7 @@ export async function GET(request: NextRequest) {
     if (!refresh_token) {
       console.error('[Google Calendar Callback] No refresh token received');
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/dashboard/settings?error=no_refresh_token`
+        `${baseUrl}/dashboard/settings?tab=calendar&error=no_refresh_token`
       );
     }
 
@@ -112,19 +128,19 @@ export async function GET(request: NextRequest) {
     if (updateError) {
       console.error('[Google Calendar Callback] Failed to update tenant:', updateError);
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/dashboard/settings?error=save_failed`
+        `${baseUrl}/dashboard/settings?tab=calendar&error=save_failed`
       );
     }
 
     console.log(`[Google Calendar] Successfully connected for tenant ${tenantId}`);
 
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard/settings?tab=calendar&success=true`
+      `${baseUrl}/dashboard/settings?tab=calendar&success=true`
     );
   } catch (error) {
     console.error('[Google Calendar Callback] Unexpected error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard/settings?error=unexpected_error`
+      `${baseUrl}/dashboard/settings?tab=calendar&error=unexpected_error`
     );
   }
 }

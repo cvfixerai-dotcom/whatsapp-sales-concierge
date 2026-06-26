@@ -32,11 +32,7 @@ export async function GET(request: NextRequest) {
         products_services,
         business_hours,
         timezone,
-        ai_personality,
-        ai_language,
         ai_greeting,
-        ai_fallback_message,
-        qualification_questions,
         twilio_account_sid,
         twilio_whatsapp_number,
         calendar_provider,
@@ -95,11 +91,7 @@ export async function GET(request: NextRequest) {
         products_services: tenant.products_services,
         business_hours: tenant.business_hours,
         timezone: tenant.timezone,
-        ai_personality: tenant.ai_personality,
-        ai_language: tenant.ai_language,
         ai_greeting: tenant.ai_greeting,
-        ai_fallback_message: tenant.ai_fallback_message,
-        qualification_questions: tenant.qualification_questions,
         twilio_configured: !!(tenant.twilio_account_sid && tenant.twilio_whatsapp_number),
         google_calendar_connected: !!(tenant.google_calendar_id && tenant.google_refresh_token),
         google_calendar_id: tenant.google_calendar_id || null,
@@ -158,11 +150,14 @@ export async function POST(request: NextRequest) {
           break;
 
         case 1: // AI Configuration
-          if (data.ai_personality) updates.ai_personality = data.ai_personality;
-          if (data.ai_language) updates.ai_language = data.ai_language;
+          // ai_personality/ai_language/ai_fallback_message/qualification_questions
+          // used to be written here but were never read by the live agent
+          // (src/lib/ai/agent.ts, prompts.ts) when set through this step-form
+          // path — removed. The chat-driven onboarding flow's
+          // update_ai_preferences tool (api/onboarding/chat/route.ts) still
+          // collects ai_personality and feeds it into the Prompt Architect,
+          // which IS live, so that path is unaffected.
           if (data.ai_greeting) updates.ai_greeting = data.ai_greeting;
-          if (data.ai_fallback_message) updates.ai_fallback_message = data.ai_fallback_message;
-          if (data.qualification_questions) updates.qualification_questions = data.qualification_questions;
           if (data.ai_assistant_name) updates.ai_assistant_name = data.ai_assistant_name;
           break;
 

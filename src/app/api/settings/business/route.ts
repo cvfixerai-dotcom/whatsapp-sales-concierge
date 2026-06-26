@@ -1,7 +1,13 @@
 /**
- * Business Settings API — business_hours, services, faqs, qualification_questions
+ * Business Settings API — business_hours, services, faqs
  * GET  - Fetch current business settings
  * POST - Update business settings
+ *
+ * Note: qualification_questions used to live here too, but it was never read
+ * by the AI agent (src/lib/ai/agent.ts / prompts.ts) — real lead-qualification
+ * questions come from the industry_agents registry (agent_config.system_prompt
+ * / qualification_stages, applied via applyIndustryAgent at signup/onboarding).
+ * Removed to avoid a dead, confusing duplicate control.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,7 +21,7 @@ export async function GET() {
 
     const { data: tenant, error } = await supabaseAdmin
       .from('tenants')
-      .select('business_hours, services, faqs, qualification_questions, company_name, industry')
+      .select('business_hours, services, faqs, company_name, industry')
       .eq('id', sessionUser.tenantId)
       .single();
 
@@ -25,7 +31,6 @@ export async function GET() {
       business_hours: tenant.business_hours ?? {},
       services: tenant.services ?? [],
       faqs: tenant.faqs ?? [],
-      qualification_questions: tenant.qualification_questions ?? [],
       company_name: tenant.company_name || '',
       industry: tenant.industry || 'other',
     });
@@ -41,15 +46,13 @@ export async function POST(request: NextRequest) {
     if (!sessionUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { business_hours, services, faqs, qualification_questions } = body;
+    const { business_hours, services, faqs } = body;
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
 
     if (business_hours !== undefined) updates.business_hours = business_hours;
     if (services !== undefined) updates.services = Array.isArray(services) ? services : [];
     if (faqs !== undefined) updates.faqs = Array.isArray(faqs) ? faqs : [];
-    if (qualification_questions !== undefined)
-      updates.qualification_questions = Array.isArray(qualification_questions) ? qualification_questions : [];
 
     const { error } = await supabaseAdmin
       .from('tenants')
