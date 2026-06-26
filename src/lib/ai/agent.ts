@@ -803,7 +803,7 @@ ${conversationHistory || 'This is the first message from this customer.'}
     }
     
     // Always use Claude Sonnet 4 - best balance of quality, speed, and cost
-    const MODEL = 'claude-sonnet-4-20250514';
+    const MODEL = 'claude-sonnet-4-6';
     console.log(`[AI Agent] Using Claude Sonnet 4 (${MODEL})`);
     
     try {

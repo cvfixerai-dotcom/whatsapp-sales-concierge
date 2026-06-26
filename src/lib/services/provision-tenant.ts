@@ -69,7 +69,7 @@ export async function provisionTenantForUser(
       trial_conversation_limit: 25,
       monthly_conversation_limit: 25,
       ai_provider: 'anthropic',
-      ai_model: 'claude-sonnet-4-20250514',
+      ai_model: 'claude-sonnet-4-6',
       business_hours: {},
       setup_completed: false,
     })

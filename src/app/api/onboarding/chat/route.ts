@@ -36,7 +36,7 @@ import { supabaseAdmin } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/supabase-server';
 import { applyIndustryAgent, initializeTenantDefaults } from '@/lib/services/tenant-initializer';
 
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tool definitions (Anthropic format)
