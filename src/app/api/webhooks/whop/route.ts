@@ -3,9 +3,11 @@ import {
   verifyAndUnwrapWhopWebhook,
   getTenantByEmail,
   getTierForPlanId,
+  getTopupTypeForPlanId,
   activateWhopSubscription,
   deactivateWhopSubscription,
 } from '@/lib/billing/whop';
+import { addTopUpConversations } from '@/lib/billing/usage-tracker';
 import { supabaseAdmin } from '@/lib/db/client';
 import { sendEmail } from '@/lib/ai/tools/send-email';
 import { log } from '@/lib/monitoring/logger';
@@ -61,6 +63,7 @@ async function handlePaymentSucceeded(payment: any) {
     const email = payment?.user?.email;
     const planId = payment?.plan?.id;
     const tier = getTierForPlanId(planId);
+    const topupType = getTopupTypeForPlanId(planId);
     const membershipId = payment?.membership?.id || null;
 
     const tenant = await getTenantByEmail(email);
@@ -70,8 +73,8 @@ async function handlePaymentSucceeded(payment: any) {
       return;
     }
 
-    if (!tier) {
-      log('warning', 'Whop payment.succeeded: could not resolve tier from plan_id', { planId, tenantId: tenant.id });
+    if (!tier && !topupType) {
+      log('warning', 'Whop payment.succeeded: could not resolve tier or topup type from plan_id', { planId, tenantId: tenant.id });
     }
 
     // Record payment
@@ -80,10 +83,10 @@ async function handlePaymentSucceeded(payment: any) {
       whop_payment_id: payment.id,
       amount: payment.total ?? payment.subtotal ?? 0,
       currency: payment.currency || 'usd',
-      type: 'subscription',
+      type: topupType ? 'topup' : 'subscription',
       status: 'success',
       paid_at: payment.paid_at ? new Date(payment.paid_at) : new Date(),
-      metadata: { plan_id: planId, tier, membership_id: membershipId },
+      metadata: { plan_id: planId, tier, topup_type: topupType, membership_id: membershipId },
     });
 
     if (tier) {
@@ -106,9 +109,11 @@ async function handlePaymentSucceeded(payment: any) {
           dashboard_link: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
         },
       }).catch(() => {});
+    } else if (topupType) {
+      await addTopUpConversations(tenant.id, topupType, payment.id);
     }
 
-    log('info', 'Whop payment processed successfully', { tenantId: tenant.id, tier, paymentId: payment.id });
+    log('info', 'Whop payment processed successfully', { tenantId: tenant.id, tier, topupType, paymentId: payment.id });
   } catch (error) {
     log('error', 'Failed to handle Whop payment.succeeded', { error });
     throw error;

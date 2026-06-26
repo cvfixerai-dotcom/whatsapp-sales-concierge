@@ -1,3 +1,10 @@
+// ─────────────────────────────────────────────────────────────────────────
+// BACKUP / DORMANT — this is the return URL for Paystack's hosted checkout
+// page. Since subscribe/topup no longer initialize Paystack transactions,
+// nothing redirects here anymore (Whop's checkout is fully hosted on
+// whop.com and confirms via webhook, not a callback redirect). Left intact
+// in case Paystack is reactivated.
+// ─────────────────────────────────────────────────────────────────────────
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTransaction } from '@/lib/billing/paystack';
 

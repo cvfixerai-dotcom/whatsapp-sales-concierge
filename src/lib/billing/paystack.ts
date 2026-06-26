@@ -1,3 +1,15 @@
+// ─────────────────────────────────────────────────────────────────────────
+// BACKUP / INACTIVE — Paystack is no longer the live payment processor.
+// Whop (./whop.ts) handles subscriptions now. This file is kept in the
+// repo on purpose as a fallback in case Whop needs to be swapped out
+// later — do not delete it, but do not wire new code into it either.
+// Functions here are only still called from:
+//   - /api/billing/usage (read-only: getPaymentHistory, just queries the
+//     `payments` table, doesn't hit the Paystack API)
+// The money-moving functions (createSubscription, purchaseTopUp,
+// chargeSetupFee, initializePaystackTransaction) are disconnected from
+// any live route as of the Whop migration.
+// ─────────────────────────────────────────────────────────────────────────
 import axios from 'axios';
 import { supabaseAdmin } from '../db/client';
 import { PRICING, getPriceForTier, getConversationsForTier } from './pricing';

@@ -40,6 +40,48 @@ export function getTierForPlanId(planId: string | null | undefined): string | nu
   return null;
 }
 
+// Tier -> Whop plan ID for one-time top-up purchases (separate from the
+// recurring subscription plans above). Created as one-time checkout links
+// in the Whop dashboard.
+export const WHOP_TOPUP_PLAN_IDS: Record<string, string | undefined> = {
+  small: process.env.WHOP_PLAN_TOPUP_SMALL,
+  medium: process.env.WHOP_PLAN_TOPUP_MEDIUM,
+  large: process.env.WHOP_PLAN_TOPUP_LARGE,
+};
+
+// Reverse lookup used by the webhook handler to figure out which top-up
+// type a given plan_id corresponds to.
+export function getTopupTypeForPlanId(planId: string | null | undefined): string | null {
+  if (!planId) return null;
+  for (const [topupType, id] of Object.entries(WHOP_TOPUP_PLAN_IDS)) {
+    if (id && id === planId) return topupType;
+  }
+  return null;
+}
+
+/**
+ * Resolve the checkout (purchase) URL for a given top-up type by looking
+ * up the pre-existing Whop one-time checkout link.
+ */
+export async function getCheckoutUrlForTopup(topupType: string): Promise<string> {
+  const planId = WHOP_TOPUP_PLAN_IDS[topupType];
+  if (!planId) {
+    throw new Error(`No Whop plan configured for topup type: ${topupType}`);
+  }
+
+  try {
+    const client = getWhopClient();
+    const plan = await client.plans.retrieve(planId);
+    if (plan?.purchase_url) {
+      return plan.purchase_url;
+    }
+    return `https://whop.com/checkout/${planId}/`;
+  } catch (error) {
+    log('error', 'Failed to retrieve Whop top-up plan, falling back to direct URL', { topupType, planId, error });
+    return `https://whop.com/checkout/${planId}/`;
+  }
+}
+
 /**
  * Resolve the checkout (purchase) URL for a given pricing tier by looking
  * up the pre-existing Whop plan. The customer is redirected here, completes

@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────
+// BACKUP / INACTIVE — Whop is the live payment processor now (see
+// /api/webhooks/whop). This endpoint is kept functional in case Paystack
+// is ever reactivated, but no checkout flow currently points here and
+// Paystack should not be sending events to it.
+// ─────────────────────────────────────────────────────────────────────────
 import { NextRequest } from 'next/server';
 import { verifyPaystackWebhook, verifyTransaction } from '@/lib/billing/paystack';
 import { addTopUpConversations } from '@/lib/billing/usage-tracker';

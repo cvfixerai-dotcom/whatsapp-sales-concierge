@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-
-import { purchaseTopUp } from '@/lib/billing/paystack';
+// Top-ups now run through Whop one-time checkout links (WHOP_PLAN_TOPUP_*
+// env vars). Paystack's purchaseTopUp() in lib/billing/paystack.ts is kept
+// as a backup only — not called from here anymore.
+import { getCheckoutUrlForTopup } from '@/lib/billing/whop';
 import { supabaseAdmin } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/supabase-server';
 
@@ -49,13 +51,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize top-up purchase
-    const topup = await purchaseTopUp(tenantId, topup_type);
+    // Resolve the Whop one-time checkout link for this top-up tier
+    const checkoutUrl = await getCheckoutUrlForTopup(topup_type);
 
+    // Field is named authorization_url for backwards compatibility with
+    // the existing dashboard billing page, which redirects to whatever
+    // this returns regardless of processor.
     return NextResponse.json({
       success: true,
-      authorization_url: topup.authorization_url,
-      reference: topup.reference
+      authorization_url: checkoutUrl,
     });
   } catch (error) {
     console.error('Error purchasing top-up:', error);
