@@ -435,6 +435,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'messages is required' }, { status: 400 });
     }
 
+    // The client seeds its local chat history with Maya's greeting as an
+    // assistant-role message purely for display. Anthropic's Messages API
+    // requires the first message in the array to have role 'user', so that
+    // greeting must be stripped before replaying history to Claude — leaving
+    // it in causes a 400 from Anthropic on every user's very first reply,
+    // which surfaces to the chat UI as "Sorry, something went wrong."
+    while (history.length > 0 && history[0].role !== 'user') {
+      history.shift();
+    }
+
+    if (history.length === 0) {
+      return NextResponse.json({ error: 'messages is required' }, { status: 400 });
+    }
+
     // Anthropic-format running transcript for this turn.
     let claudeMessages: any[] = history.map(m => ({ role: m.role, content: m.content }));
 

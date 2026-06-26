@@ -54,7 +54,7 @@ export async function initializeTenantDefaults(
     timezone,
     slot_duration: 30,
     buffer_time: 0,
-    min_notice_hours: 0.5,
+    min_notice_hours: 2,
     max_per_day: 10,
     booking_window_days: 30,
     monday_enabled: !defaultBusinessHours.monday.closed,
