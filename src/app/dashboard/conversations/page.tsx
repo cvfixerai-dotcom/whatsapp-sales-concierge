@@ -32,7 +32,18 @@ export default function ConversationsPage() {
   const [newMessageMap, setNewMessageMap] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const pollRef = useRef(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Tenant_id is needed to join the per-tenant Realtime broadcast channel below
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      const { data } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
+      if (data?.tenant_id) setTenantId(data.tenant_id);
+    });
+  }, []);
 
   useEffect(() => {
     if (!_authReady) return;
@@ -40,19 +51,36 @@ export default function ConversationsPage() {
     fetch('/api/conversations/repair', { method: 'POST' }).catch(() => {});
     fetchConversations();
 
+    // Push-based updates: a private Realtime broadcast channel (fed by a DB
+    // trigger via realtime.broadcast_changes) replaces the old 5s poll. A
+    // long-interval fallback poll stays as a safety net in case the socket
+    // silently drops.
     if (pollRef.current) clearInterval(pollRef.current);
 // @ts-ignore
     pollRef.current = setInterval(() => {
       fetchConversations({ silent: true });
-    }, 5000);
+    }, 60000);
+
+    if (tenantId) {
+      const channel = supabase.channel(`tenant:${tenantId}:conversations`, { config: { private: true } });
+      channel
+        .on('broadcast', { event: 'INSERT' }, () => fetchConversations({ silent: true }))
+        .on('broadcast', { event: 'UPDATE' }, () => fetchConversations({ silent: true }))
+        .subscribe();
+      channelRef.current = channel;
+    }
 
     return () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [_authReady]);
+  }, [_authReady, tenantId]);
 
   const fetchConversations = async ({ silent = false } = {}) => {
     try {

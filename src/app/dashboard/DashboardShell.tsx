@@ -50,6 +50,7 @@ export default function DashboardShell({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [whatsappBannerDismissed, setWhatsappBannerDismissed] = useState(false);
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const notificationPollRef = useRef<NodeJS.Timeout | null>(null);
   const lastNotifiedRef = useRef<Record<string, string>>({});
   const lastSoundedRef = useRef<Record<string, string>>({});
@@ -66,12 +67,14 @@ export default function DashboardShell({
     });
   }, [router]);
 
-  // Also load role from public.users
+  // Also load role + tenant_id from public.users (tenant_id is needed to join
+  // the per-tenant Realtime broadcast channel below)
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
-      const { data } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
+      const { data } = await supabase.from('users').select('role, tenant_id').eq('id', user.id).maybeSingle();
       if (data?.role) setUserRole(data.role);
+      if (data?.tenant_id) setTenantId(data.tenant_id);
     });
   }, []);
 
@@ -161,19 +164,37 @@ export default function DashboardShell({
     } catch {}
   };
 
+  // Push-based updates: subscribe to a private Realtime broadcast channel
+  // (fed by a DB trigger via realtime.broadcast_changes) scoped to this
+  // tenant's conversations, instead of polling /api/conversations every 5s.
+  // A long-interval fallback poll stays in place as a safety net in case a
+  // socket silently drops.
   useEffect(() => {
     fetchNotifications();
+
     if (notificationPollRef.current) clearInterval(notificationPollRef.current);
-    notificationPollRef.current = setInterval(fetchNotifications, 5000);
+    notificationPollRef.current = setInterval(fetchNotifications, 60000);
+
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'conversationLastSeen') fetchNotifications();
     };
     window.addEventListener('storage', handleStorage);
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    if (tenantId) {
+      channel = supabase.channel(`tenant:${tenantId}:conversations`, { config: { private: true } });
+      channel
+        .on('broadcast', { event: 'INSERT' }, () => fetchNotifications())
+        .on('broadcast', { event: 'UPDATE' }, () => fetchNotifications())
+        .subscribe();
+    }
+
     return () => {
       if (notificationPollRef.current) { clearInterval(notificationPollRef.current); notificationPollRef.current = null; }
       window.removeEventListener('storage', handleStorage);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     if (!notificationOpen) return;

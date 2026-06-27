@@ -97,6 +97,7 @@ export default function ConversationViewer() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isMountedRef = useRef(true);
   const lastSeenRef = useRef<string | null>(null);
 
@@ -107,10 +108,15 @@ export default function ConversationViewer() {
       router.push('/auth/login');
     } else if (status === 'authenticated' && conversationId) {
       fetchConversationData();
+      startRealtimeSubscription();
     }
     return () => {
       isMountedRef.current = false;
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [status, conversationId]);
 
@@ -161,19 +167,37 @@ export default function ConversationViewer() {
     );
   };
 
+  const refreshConversation = async () => {
+    if (!isMountedRef.current) return;
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}`, { cache: 'no-store' });
+      if (!res.ok || !isMountedRef.current) return;
+      const { messages: fresh, conversation } = await res.json();
+      if (!isMountedRef.current) return;
+      if (fresh) setMessages((prev) => mergeMessages(prev, fresh));
+      if (conversation) setIsHumanMode(conversation.status === 'human-handling' || !!conversation.assigned_agent_id);
+    } catch {}
+  };
+
+  // Long-interval fallback poll — safety net in case the Realtime socket
+  // (subscribed below) silently drops. The actual push updates come from
+  // startRealtimeSubscription.
   const startPolling = () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    pollIntervalRef.current = setInterval(async () => {
-      if (!isMountedRef.current) return;
-      try {
-        const res = await fetch(`/api/conversations/${conversationId}`, { cache: 'no-store' });
-        if (!res.ok || !isMountedRef.current) return;
-        const { messages: fresh, conversation } = await res.json();
-        if (!isMountedRef.current) return;
-        if (fresh) setMessages((prev) => mergeMessages(prev, fresh));
-        if (conversation) setIsHumanMode(conversation.status === 'human-handling' || !!conversation.assigned_agent_id);
-      } catch {}
-    }, 4000);
+    pollIntervalRef.current = setInterval(refreshConversation, 60000);
+  };
+
+  // Push-based updates: subscribe to a private Realtime broadcast channel
+  // (fed by a DB trigger via realtime.broadcast_changes) scoped to this
+  // conversation's messages, instead of polling every 4s.
+  const startRealtimeSubscription = () => {
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    const channel = supabase.channel(`conversation:${conversationId}`, { config: { private: true } });
+    channel
+      .on('broadcast', { event: 'INSERT' }, () => refreshConversation())
+      .on('broadcast', { event: 'UPDATE' }, () => refreshConversation())
+      .subscribe();
+    channelRef.current = channel;
   };
 
   const fetchConversationData = async () => {
