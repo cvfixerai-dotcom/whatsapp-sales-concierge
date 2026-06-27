@@ -1,0 +1,95 @@
+import { AIResponse, ToolCall } from '../agent.ts';
+
+export interface AIProvider {
+  call(params: AIProviderParams): Promise<AIResponse>;
+}
+
+export interface AIProviderParams {
+  systemPrompt: string;
+  messages: Array<{ role: string; content: string }>;
+  newMessage: string;
+  tools: any[];
+  language: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export abstract class BaseAIProvider implements AIProvider {
+  protected apiKey: string;
+  protected model: string;
+
+  constructor(apiKey: string, model: string) {
+    this.apiKey = apiKey;
+    this.model = model;
+  }
+
+  abstract call(params: AIProviderParams): Promise<AIResponse>;
+
+  protected formatMessages(
+    systemPrompt: string,
+    history: Array<{ role: string; content: string }>,
+    newMessage: string
+  ): Array<{ role: string; content: string }> {
+    // 🔥 CRITICAL FIX: Don't add newMessage if it's empty (for follow-up calls after tool execution)
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history,
+    ];
+
+    // Only add the new user message if it's not empty
+    if (newMessage && newMessage.trim().length > 0) {
+      messages.push({ role: 'user', content: newMessage });
+    }
+
+    return messages;
+  }
+
+  protected parseToolCalls(toolCalls: any[]): ToolCall[] {
+    return toolCalls.map(tc => ({
+      name: tc.function.name,
+      parameters: JSON.parse(tc.function.arguments),
+    }));
+  }
+
+  protected detectIntent(message: string): string {
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.includes('appointment') || lowerMessage.includes('book')) return 'booking';
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost')) return 'pricing';
+    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) return 'greeting';
+    if (lowerMessage.includes('complaint') || lowerMessage.includes('problem')) return 'complaint';
+    if (lowerMessage.includes('interested') || lowerMessage.includes('want')) return 'interest';
+    if (lowerMessage.includes('question') || lowerMessage.includes('help')) return 'inquiry';
+
+    return 'general';
+  }
+
+  protected detectSentiment(message: string): string {
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.match(/\b(angry|mad|frustrated|upset|terrible|awful)\b/)) return 'negative';
+    if (lowerMessage.match(/\b(happy|great|excellent|perfect|love|amazing)\b/)) return 'positive';
+
+    return 'neutral';
+  }
+
+  protected calculateConfidence(response: string, context: any): number {
+    // Simple confidence calculation based on response characteristics
+    let confidence = 0.8; // Base confidence
+
+    // Increase confidence for direct answers
+    if (response.length > 10 && response.length < 200) confidence += 0.1;
+
+    // Decrease confidence for generic responses
+    if (response.includes('I understand') || response.includes('Thank you for')) confidence -= 0.1;
+
+    // Ensure confidence is within bounds
+    return Math.max(0.1, Math.min(1.0, confidence));
+  }
+}
+
+// NOTE: the Node version of this file had a `getAIProvider()` factory that used
+// `require('./anthropic')` / `require('./openai')` to lazily pick a provider.
+// Deno has no `require()`, and this Edge Function only ever uses Anthropic
+// (agent.ts does `await import('./providers/anthropic.ts')` directly), so the
+// factory is intentionally omitted here rather than ported.

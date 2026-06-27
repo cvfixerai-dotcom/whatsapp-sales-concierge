@@ -1,15 +1,17 @@
-import { supabaseAdmin } from '../db/client';
-import { twilioService } from '../services/twilio';
-import { redisQueue } from '../queue/redis';
-import { getAIProvider } from './providers';
-import { buildSystemPrompt, getQualificationCriteria, calculateLeadScore } from './prompts';
-import { calculateWeightedLeadScore } from './lead-scoring';
-import { determineConversationState, ConversationState } from './state-manager';
-import { executeTool } from './tools';
-import { formatBookingConfirmation } from './booking-confirmation';
-import { checkHandoffTriggers, logHandoffTrigger } from '../handoff/detector';
-import { notifyHandoffRequest } from '../handoff/notifier';
-import * as Sentry from '@sentry/nextjs';
+import { supabaseAdmin } from '../db/client.ts';
+import { twilioService } from '../services/twilio.ts';
+import { redisQueue } from '../queue/redis.ts';
+import { buildSystemPrompt, getQualificationCriteria, calculateLeadScore } from './prompts.ts';
+import { calculateWeightedLeadScore } from './lead-scoring.ts';
+import { determineConversationState, ConversationState } from './state-manager.ts';
+import { executeTool } from './tools/index.ts';
+import { formatBookingConfirmation } from './booking-confirmation.ts';
+import { checkHandoffTriggers, logHandoffTrigger } from '../handoff/detector.ts';
+import { notifyHandoffRequest } from '../handoff/notifier.ts';
+
+// Deno port note: @sentry/nextjs is not available in the Edge runtime.
+// Errors are logged to console + ai_processing_logs (see logProcessingError) instead.
+const Sentry = { captureException: (error: unknown, _ctx?: unknown) => console.error('[Sentry shim] would report:', error) };
 
 export interface ProcessMessageParams {
   tenantId: string;
@@ -104,13 +106,13 @@ export class AIAgent {
       );
       const conversationHistory = this.formatHistory(context.messages);
 
-      // 🔥 FIX: The inbound message is saved to `messages` BEFORE this agent runs,
-      // so `context.messages` — and therefore `conversationHistory` — already ends
-      // with this exact user turn. Passing `params.messageContent` again as
-      // `newMessage` would append a SECOND consecutive 'user' turn, which Anthropic's
-      // API rejects with a 400 ("roles must alternate"), causing every reply to
-      // silently fail over to the generic "I'm having some trouble" fallback.
-      // Detect the duplicate and omit it.
+      // 🔥 FIX: The inbound message is saved to `messages` BEFORE this agent runs
+      // (see process-message/index.ts step 4), so `context.messages` — and therefore
+      // `conversationHistory` — already ends with this exact user turn. Passing
+      // `params.messageContent` again as `newMessage` would append a SECOND
+      // consecutive 'user' turn, which Anthropic's API rejects with a 400
+      // ("roles must alternate"), causing every reply to silently fail over to the
+      // generic "I'm having some trouble" fallback. Detect the duplicate and omit it.
       const lastHistoryMsg = conversationHistory[conversationHistory.length - 1];
       const isDuplicateLastMessage =
         lastHistoryMsg?.role === 'user' &&
@@ -122,7 +124,7 @@ export class AIAgent {
 
       // 🔥 CRIT-2 FIX: In post-booking state, remove calendar/booking tools
       // This makes it physically impossible for the AI to re-offer slots
-      let tools = this.getAvailableTools(context.tenant);
+      let tools = await this.getAvailableTools(context.tenant);
       if (hasRecentBooking || state === 'post_booking' || state === 'email_collected') {
         const blockedTools = ['check_calendar', 'book_appointment', 'cancel_appointment'];
         tools = tools.filter((t: any) => {
@@ -825,9 +827,9 @@ ${conversationHistory || 'This is the first message from this customer.'}
     console.log(`[AI Agent] Using Claude Sonnet 4 (${MODEL})`);
     
     try {
-      const { AnthropicProvider } = require('./providers/anthropic');
+      const { AnthropicProvider } = await import('./providers/anthropic.ts');
       const anthropicProvider = new AnthropicProvider(anthropicKey, MODEL);
-      const { getAvailableTools } = require('./tools');
+      const { getAvailableTools } = await import('./tools/index.ts');
       const tools = (params.tools && params.tools.length > 0) ? getAvailableTools('anthropic') : undefined;
       
       if (tools && tools.length > 0) {
@@ -897,9 +899,9 @@ ${conversationHistory || 'This is the first message from this customer.'}
   /**
    * Get available tools for AI
    */
-  private getAvailableTools(tenant: any): any[] {
+  private async getAvailableTools(tenant: any): Promise<any[]> {
     // Import tools dynamically
-    const { getAvailableTools } = require('./tools');
+    const { getAvailableTools } = await import('./tools/index.ts');
     return getAvailableTools(tenant.ai_provider || 'openai');
   }
 

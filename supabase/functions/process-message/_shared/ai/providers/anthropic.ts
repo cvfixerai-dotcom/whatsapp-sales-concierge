@@ -1,5 +1,5 @@
-import { BaseAIProvider, AIProviderParams } from './index';
-import { AIResponse } from '../agent';
+import { BaseAIProvider, AIProviderParams } from './index.ts';
+import { AIResponse } from '../agent.ts';
 
 export class AnthropicProvider extends BaseAIProvider {
   /**
