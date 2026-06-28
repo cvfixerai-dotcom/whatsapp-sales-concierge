@@ -81,6 +81,10 @@ async function handleInboundMessage(payload: InboundPayload) {
   const { tenantId, tenantLimits, messageSid, fromNumber, toNumber, messageBody } = payload;
   const cleanFrom = fromNumber.replace('whatsapp:', '');
 
+  // Lightweight stage timing to diagnose end-to-end latency.
+  const t0 = Date.now();
+  const ms = () => Date.now() - t0;
+
   try {
     // Store webhook event (mirrors the old after() callback's first step)
     await supabaseAdmin.from('webhook_events').insert({
@@ -189,6 +193,8 @@ async function handleInboundMessage(payload: InboundPayload) {
       }).eq('id', conversation.id),
     ]);
 
+    console.log(`[Edge:timing] DB setup (contact/conversation/writes) ready in ${ms()}ms`);
+
     // 5. Fast regex extraction (no extra LLM call)
     try {
       const budgetHint = extractBudgetHints(messageBody);
@@ -211,6 +217,7 @@ async function handleInboundMessage(payload: InboundPayload) {
     }
 
     // 7. AI response
+    const aiStart = Date.now();
     try {
       const isFirstMessage = (conversation.message_count || 0) <= 1;
 
@@ -240,7 +247,7 @@ async function handleInboundMessage(payload: InboundPayload) {
           }),
           twilioService.sendWhatsAppMessage(tenantId, contact.whatsapp_number, greeting),
         ]);
-        console.log('[Edge:process-message] Auto-greeting sent');
+        console.log(`[Edge:process-message] Auto-greeting sent in ${Date.now() - aiStart}ms (total ${ms()}ms)`);
       } else {
         await aiAgent.processInboundMessage({
           tenantId,
@@ -249,7 +256,7 @@ async function handleInboundMessage(payload: InboundPayload) {
           messageContent: messageBody,
           language: contact.language || 'en',
         });
-        console.log('[Edge:process-message] AI response sent');
+        console.log(`[Edge:process-message] AI response sent in ${Date.now() - aiStart}ms (total ${ms()}ms)`);
       }
     } catch (aiErr) {
       console.error('[Edge:process-message] AI failed:', aiErr);
@@ -274,6 +281,8 @@ async function handleInboundMessage(payload: InboundPayload) {
       .eq('event_type', 'inbound_message')
       .eq('processed', false)
       .ilike('payload->>messageSid', messageSid);
+
+    console.log(`[Edge:timing] handleInboundMessage total ${ms()}ms`);
   } catch (err) {
     console.error('[Edge:process-message] Background processing failed:', err);
   }
