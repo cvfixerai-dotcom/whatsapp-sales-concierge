@@ -96,6 +96,15 @@ async function storeLastSlots(contactId: string | undefined, slots: any[], timez
       dateOnly: slot.dateOnly,
     }));
 
+    // When the search narrowed to exactly ONE slot, the customer picked a specific
+    // time — remember it as the pending booking so a later "yes"/"go ahead" can be
+    // booked deterministically (see agent.ts tryDeterministicBooking) instead of
+    // looping back through check_calendar. Otherwise clear any stale pending slot.
+    const pendingSlot =
+      slotPayload.length === 1
+        ? { datetime: slotPayload[0].datetime, formatted: slotPayload[0].formatted, time: slotPayload[0].time }
+        : null;
+
     await supabaseAdmin
       .from('contacts')
       .update({
@@ -104,6 +113,8 @@ async function storeLastSlots(contactId: string | undefined, slots: any[], timez
           calendar_last_slots: slotPayload,
           calendar_last_slots_at: new Date().toISOString(),
           calendar_last_timezone: timezone,
+          pending_booking_slot: pendingSlot,
+          pending_booking_slot_at: pendingSlot ? new Date().toISOString() : null,
         },
       })
       .eq('id', contactId);

@@ -5,6 +5,7 @@ import { buildSystemPrompt, getQualificationCriteria, calculateLeadScore } from 
 import { calculateWeightedLeadScore } from './lead-scoring.ts';
 import { determineConversationState, ConversationState } from './state-manager.ts';
 import { executeTool } from './tools/index.ts';
+import { bookAppointment } from './tools/book-appointment.ts';
 import { formatBookingConfirmation } from './booking-confirmation.ts';
 import { checkHandoffTriggers, logHandoffTrigger } from '../handoff/detector.ts';
 import { notifyHandoffRequest } from '../handoff/notifier.ts';
@@ -98,6 +99,20 @@ export class AIAgent {
         context.contact,
         context.messages
       );
+
+      // 🔥 DETERMINISTIC CONFIRM → BOOK (safety net for the confirmation loop)
+      // If we previously offered exactly ONE specific slot (stored as pending_booking_slot
+      // by check_calendar) and the customer replies with a plain affirmation
+      // ("yes", "go ahead", "book it", ...), book it directly instead of asking the LLM —
+      // which historically re-ran check_calendar and re-asked "shall I lock it in?" forever.
+      if (!hasRecentBooking && state !== 'post_booking' && state !== 'email_collected') {
+        const handled = await this.tryDeterministicBooking(params, context);
+        if (handled) {
+          console.log(`[AI Agent] Message processed in ${Date.now() - startTime}ms (deterministic booking)`);
+          return;
+        }
+      }
+
       const systemPrompt = this.buildEffectiveSystemPrompt(
         context.tenant,
         context.contact,
@@ -280,7 +295,7 @@ export class AIAgent {
           const toolResultsSummary = aiResponse.toolCalls.map(tc => {
             if (tc.name === 'check_calendar') {
               if (tc.result?.success && tc.result?.available_slots?.length > 0) {
-                return `Calendar check: ${tc.result.available_slots.length} available slots — display these formatted times to the customer and ask which they prefer: ${tc.result.available_slots.slice(0, 5).map((s: any) => s.formatted).join(', ')}. When the customer picks one, call book_appointment with the exact datetime ISO string.`;
+                return `Calendar check: ${tc.result.available_slots.length} available slot(s): ${tc.result.available_slots.slice(0, 5).map((s: any) => s.formatted).join(', ')}. If the customer has ALREADY named or confirmed one of these times, call book_appointment NOW with that slot's exact datetime ISO — do NOT ask again. Otherwise display these times and ask which they prefer.`;
               }
               return `Calendar check: ${tc.result?.error || 'No available slots found'}`;
             }
@@ -298,7 +313,7 @@ export class AIAgent {
 
           const enrichedPrompt =
             freshSystemPrompt +
-            `\n\nTOOL RESULTS (you just executed these tools — use the results in your next response):\n${toolResultsSummary}\n\nIMPORTANT: Respond to the customer based on the tool results above. Be natural and conversational. Keep it to 1-2 sentences. NEVER say "I'm processing" or "please wait". NEVER confirm a booking yourself — only the system can confirm bookings.`;
+            `\n\nTOOL RESULTS (you just executed these tools — use the results in your next response):\n${toolResultsSummary}\n\nIMPORTANT: Respond to the customer based on the tool results above. Be natural and conversational. Keep it to 1-2 sentences. NEVER say "I'm processing" or "please wait". If the customer has confirmed a time you offered, you MUST call book_appointment with that slot's exact datetime ISO — do not just re-state availability or ask again. Do NOT write your own booking-confirmation text; the system sends the confirmation after book_appointment succeeds.`;
 
           // 🔥 CRITICAL FIX: Pass updated history WITHOUT re-adding the user message
           // The user message is already in updatedHistory, so we pass empty string
@@ -363,7 +378,7 @@ export class AIAgent {
             const secondToolResultsSummary = followUpResponse.toolCalls.map(tc => {
               if (tc.name === 'check_calendar') {
                 if (tc.result?.success && tc.result?.available_slots?.length > 0) {
-                  return `Calendar check: ${tc.result.available_slots.length} available slots — display these formatted times to the customer and ask which they prefer: ${tc.result.available_slots.slice(0, 5).map((s: any) => s.formatted).join(', ')}. When the customer picks one, call book_appointment with the exact datetime ISO string.`;
+                  return `Calendar check: ${tc.result.available_slots.length} available slot(s): ${tc.result.available_slots.slice(0, 5).map((s: any) => s.formatted).join(', ')}. If the customer has ALREADY named or confirmed one of these times, call book_appointment NOW with that slot's exact datetime ISO — do NOT ask again. Otherwise display these times and ask which they prefer.`;
                 }
                 return `Calendar check: ${tc.result?.error || 'No available slots found'}`;
               }
@@ -538,6 +553,126 @@ export class AIAgent {
       
       // Log error for investigation
       await this.logProcessingError(params, error as Error, aiResponse, handoffDetected);
+    }
+  }
+
+  /**
+   * Deterministic confirm → book.
+   *
+   * When check_calendar narrows to a single slot it records
+   * `contact.metadata.pending_booking_slot`. If the customer then replies with a
+   * pure affirmation ("yes", "go ahead", "book it", ...), book that slot directly
+   * here — bypassing the LLM, which used to re-run check_calendar and re-ask
+   * "shall I lock it in?" indefinitely. Returns true if it booked + replied
+   * (caller should stop), false to fall through to the normal AI flow.
+   */
+  private async tryDeterministicBooking(
+    params: ProcessMessageParams,
+    context: ConversationContext
+  ): Promise<boolean> {
+    const meta =
+      context.contact?.metadata && typeof context.contact.metadata === 'object' && !Array.isArray(context.contact.metadata)
+        ? context.contact.metadata
+        : null;
+    const pending = meta?.pending_booking_slot;
+    if (!pending?.datetime) return false;
+
+    // Ignore stale (>24h) or past slots.
+    const pendingAt = meta?.pending_booking_slot_at ? new Date(meta.pending_booking_slot_at).getTime() : 0;
+    if (!pendingAt || Date.now() - pendingAt > 24 * 60 * 60 * 1000) return false;
+    if (new Date(pending.datetime).getTime() <= Date.now()) return false;
+
+    if (!this.isPureConfirmation(params.messageContent)) return false;
+
+    console.log(`[AI Agent] ⚡ Deterministic confirm→book for pending slot ${pending.datetime}`);
+    const result = await bookAppointment({
+      tenantId: params.tenantId,
+      contactId: params.contactId,
+      conversationId: params.conversationId,
+      slotTime: pending.datetime,
+    });
+
+    // Always clear the pending slot so we never double-fire on a later stray "yes".
+    await this.clearPendingBooking(params.contactId);
+
+    if (!result.success || !result.confirmed_iso) {
+      console.warn('[AI Agent] Deterministic booking failed, falling back to AI flow:', result.error);
+      return false;
+    }
+
+    const tz =
+      context.tenant.timezone ||
+      context.tenant.business_hours?.timezone ||
+      'Asia/Dubai';
+    const language = context.contact.language || params.language || 'en';
+    const message = formatBookingConfirmation(result.confirmed_iso, tz, language);
+
+    await this.saveMessage({
+      conversation_id: params.conversationId,
+      tenant_id: params.tenantId,
+      direction: 'outbound',
+      sender_type: 'ai',
+      content: message,
+    });
+
+    await twilioService.sendWhatsAppMessage(
+      params.tenantId,
+      context.contact.whatsapp_number,
+      message
+    );
+
+    return true;
+  }
+
+  /**
+   * True only when the message is a pure confirmation of a previously offered
+   * slot — i.e. it consists solely of affirmation/filler words. Anything that
+   * looks like a new request (a different time, weekday, negation, or "but/instead")
+   * returns false so the LLM can handle it.
+   */
+  private isPureConfirmation(text: string): boolean {
+    if (!text) return false;
+    let t = ` ${text.toLowerCase().trim()} `;
+
+    // A new selection or a change of mind → not a plain confirmation.
+    if (/\b(no|not|don'?t|never|wait|hold on|change|instead|different|another|reschedule|cancel|but|actually|maybe|what about|how about|can we|could we|rather|prefer)\b/.test(t)) {
+      return false;
+    }
+    // A clock time or weekday means they're picking/altering a slot, not just confirming.
+    if (/\b\d{1,2}\s*(?::\d{2})?\s*(?:am|pm)\b/.test(t)) return false;
+    if (/\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/.test(t)) return false;
+
+    const affirmatives = [
+      'yes please', 'yes', 'yeah', 'yep', 'yup', 'sure', 'of course', 'absolutely', 'definitely',
+      'go ahead and', 'go ahead', 'go for it', 'please do', 'please', 'do it',
+      'book it', 'book the slot', 'book that', 'book me', 'lock it in', 'lock that in', 'lock in',
+      'confirm it', 'confirmed', 'confirm', 'sounds good', 'sound good',
+      'that works', 'works for me', 'works', 'perfect', 'great', 'okay', 'ok', 'k',
+    ];
+    for (const a of affirmatives) {
+      t = t.replace(new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), ' ');
+    }
+    // Strip filler/stopwords + punctuation; if nothing meaningful remains, it's a confirmation.
+    t = t.replace(/\b(and|the|a|for|me|it|that|this|then|now|to|let'?s|i|we|you|just|all|set|right|away)\b/g, ' ');
+    t = t.replace(/[^a-z]/g, ' ').trim();
+    return t.length === 0;
+  }
+
+  /** Remove the pending booking marker from a contact's metadata. */
+  private async clearPendingBooking(contactId: string): Promise<void> {
+    try {
+      const { data: c } = await supabaseAdmin
+        .from('contacts')
+        .select('metadata')
+        .eq('id', contactId)
+        .single();
+      const meta =
+        c?.metadata && typeof c.metadata === 'object' && !Array.isArray(c.metadata) ? { ...c.metadata } : {};
+      delete meta.pending_booking_slot;
+      delete meta.pending_booking_slot_at;
+      await supabaseAdmin.from('contacts').update({ metadata: meta }).eq('id', contactId);
+    } catch (error) {
+      console.error('[AI Agent] Failed to clear pending booking:', error);
     }
   }
 
