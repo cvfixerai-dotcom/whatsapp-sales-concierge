@@ -7,6 +7,13 @@ export const env = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+
+  // Supabase Edge Function (process-message) — runs the inbound AI pipeline.
+  // EDGE_FUNCTION_SECRET is a PAIRED secret: it must exactly match the value
+  // set on the deployed function (`supabase secrets set EDGE_FUNCTION_SECRET=...`).
+  // If they drift the function returns 401 and no replies are sent.
+  SUPABASE_EDGE_FUNCTION_URL: process.env.SUPABASE_EDGE_FUNCTION_URL || '',
+  EDGE_FUNCTION_SECRET: process.env.EDGE_FUNCTION_SECRET || '',
   
   // NextAuth
   NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',

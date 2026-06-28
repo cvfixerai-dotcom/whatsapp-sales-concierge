@@ -97,7 +97,24 @@ TWILIO_ACCOUNT_SID=your_account_sid
 TWILIO_AUTH_TOKEN=your_auth_token
 UPSTASH_REDIS_REST_URL=your_redis_url
 UPSTASH_REDIS_REST_TOKEN=your_redis_token
+
+# Supabase Edge Function (process-message) — runs the inbound AI pipeline.
+# The webhook acks Twilio in <500ms, then fires one authenticated fetch here.
+SUPABASE_EDGE_FUNCTION_URL=https://<project-ref>.supabase.co/functions/v1/process-message
+# PAIRED secret — must exactly match the value set on the deployed function via
+# `supabase secrets set EDGE_FUNCTION_SECRET=...`. If they drift the function
+# returns 401 and no replies are sent.
+EDGE_FUNCTION_SECRET=your_shared_secret
 ```
+
+> **Note:** Heavy processing (contact/conversation upsert, AI agent, Twilio
+> send) now runs entirely inside the Supabase Edge Function
+> (`supabase/functions/process-message/index.ts`), which has a ~150s window —
+> not in the Next.js webhook, where Vercel's 10s cap would kill the pipeline.
+> The Edge Function secret must be set on the deployed function too:
+> ```bash
+> supabase secrets set EDGE_FUNCTION_SECRET=your_shared_secret
+> ```
 
 ### 3. Start Workers
 ```bash
