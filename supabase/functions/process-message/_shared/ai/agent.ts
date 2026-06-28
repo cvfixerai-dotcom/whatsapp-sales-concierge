@@ -653,7 +653,7 @@ export class AIAgent {
       t = t.replace(new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), ' ');
     }
     // Strip filler/stopwords + punctuation; if nothing meaningful remains, it's a confirmation.
-    t = t.replace(/\b(and|the|a|for|me|it|that|this|then|now|to|let'?s|i|we|you|just|all|set|right|away|thanks|thank you|cool|alright)\b/g, ' ');
+    t = t.replace(/\b(and|the|a|for|me|it|that|this|then|now|to|let'?s|i|we|you|just|all|set|right|away)\b/g, ' ');
     t = t.replace(/[^a-z]/g, ' ').trim();
     return t.length === 0;
   }
