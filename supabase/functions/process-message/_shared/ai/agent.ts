@@ -965,7 +965,18 @@ ${conversationHistory || 'This is the first message from this customer.'}
       const { AnthropicProvider } = await import('./providers/anthropic.ts');
       const anthropicProvider = new AnthropicProvider(anthropicKey, MODEL);
       const { getAvailableTools } = await import('./tools/index.ts');
-      const tools = (params.tools && params.tools.length > 0) ? getAvailableTools('anthropic') : undefined;
+      // callAI always uses the Anthropic provider, so tools must be in Anthropic
+      // format. But we must also honor the caller's FILTERED set — e.g. the CRIT-2
+      // post-booking gating removes check_calendar/book_appointment/cancel_appointment
+      // from params.tools. Previously this re-fetched the full Anthropic tool list and
+      // discarded that filtering, so the AI could still re-offer/rebook after a booking.
+      // Filter the Anthropic-format list down to the names the caller allowed.
+      const allowedToolNames = new Set(
+        (params.tools || []).map((t: any) => t.name || t.function?.name)
+      );
+      const tools = (params.tools && params.tools.length > 0)
+        ? getAvailableTools('anthropic').filter((t: any) => allowedToolNames.has(t.name))
+        : undefined;
       
       if (tools && tools.length > 0) {
         console.log(`[AI Agent] Tools available: ${tools.map((t: any) => t.name).join(', ')}`);
