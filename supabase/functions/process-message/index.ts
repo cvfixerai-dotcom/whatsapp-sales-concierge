@@ -48,6 +48,17 @@ const UPGRADE_MESSAGE =
   'Please upgrade your plan in the dashboard to continue using WhatsApp AI.';
 
 Deno.serve(async (req: Request) => {
+  // Keep-warm / health ping: a lightweight unauthenticated GET that boots the
+  // isolate (compiling the static module graph) so real POSTs aren't cold.
+  // Does no work and writes no logs — just a fast 200. A pg_cron job hits this
+  // every minute (with x-region set) to keep the regional instance warm.
+  if (req.method === 'GET') {
+    return new Response(JSON.stringify({ ok: true, status: 'warm' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Simple shared-secret auth so this function can't be invoked by anyone
   // who finds the URL — only our own Next.js backend should call it.
   const authHeader = req.headers.get('authorization') || '';
