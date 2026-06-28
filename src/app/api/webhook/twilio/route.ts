@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
         headers: {
           Authorization: `Bearer ${env.EDGE_FUNCTION_SECRET}`,
           'Content-Type': 'application/json',
+          // Run the function in the same region as the Supabase DB so its many
+          // DB round-trips are local (otherwise it runs near Vercel/us-east-1
+          // while the DB is in ap-southeast-2, adding ~200ms per query).
+          ...(env.SUPABASE_EDGE_FUNCTION_REGION
+            ? { 'x-region': env.SUPABASE_EDGE_FUNCTION_REGION }
+            : {}),
         },
         // Matches the Edge Function's InboundPayload interface.
         body: JSON.stringify({

@@ -836,8 +836,9 @@ ${conversationHistory || 'This is the first message from this customer.'}
         console.log(`[AI Agent] Tools available: ${tools.map((t: any) => t.name).join(', ')}`);
       }
       
+      const llmStart = Date.now();
       const response = await anthropicProvider.call({ ...callOptions, ...(tools ? { tools } : {}) });
-      console.log('[AI Agent] Claude response received successfully');
+      console.log(`[AI Agent] Claude response received successfully in ${Date.now() - llmStart}ms`);
       return response;
     } catch (error) {
       // 🔥 MED-6 FIX: Return fallback instead of re-throwing (was unreachable code before)
