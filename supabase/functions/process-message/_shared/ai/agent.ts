@@ -137,11 +137,14 @@ export class AIAgent {
         console.log('[AI Agent] 🔧 Skipping duplicate newMessage — already last turn in history');
       }
 
-      // 🔥 CRIT-2 FIX: In post-booking state, remove calendar/booking tools
-      // This makes it physically impossible for the AI to re-offer slots
+      // 🔥 CRIT-2 FIX: In post-booking state, remove the slot-offering tools so the
+      // AI can't re-offer times or rebook. cancel_appointment stays available so a
+      // customer can cancel/reschedule right after booking — cancelling flips the
+      // state back to normal (the recent-booking query only counts 'scheduled'
+      // appointments), which re-enables check_calendar/book_appointment for a rebook.
       let tools = await this.getAvailableTools(context.tenant);
       if (hasRecentBooking || state === 'post_booking' || state === 'email_collected') {
-        const blockedTools = ['check_calendar', 'book_appointment', 'cancel_appointment'];
+        const blockedTools = ['check_calendar', 'book_appointment'];
         tools = tools.filter((t: any) => {
           const toolName = t.name || t.function?.name;
           return !blockedTools.includes(toolName);
@@ -1049,7 +1052,9 @@ ${conversationHistory || 'This is the first message from this customer.'}
   private async getAvailableTools(tenant: any): Promise<any[]> {
     // Import tools dynamically
     const { getAvailableTools } = await import('./tools/index.ts');
-    return getAvailableTools(tenant.ai_provider || 'openai');
+    // callAI always uses the Anthropic provider, so default to Anthropic-format
+    // tools when a tenant has no explicit provider set.
+    return getAvailableTools(tenant.ai_provider || 'anthropic');
   }
 
   /**

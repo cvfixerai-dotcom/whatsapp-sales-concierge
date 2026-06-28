@@ -58,8 +58,8 @@ export function determineConversationState(
     return {
       state: 'email_collected',
       context: 'POST_BOOKING_COMPLETE: Booking confirmed, email collected.',
-      allowedTools: ['update_lead'],
-      blockedTools: ['check_calendar', 'book_appointment', 'cancel_appointment'],
+      allowedTools: ['update_lead', 'cancel_appointment'],
+      blockedTools: ['check_calendar', 'book_appointment'],
       promptAddendum: `BOOKING COMPLETE. Email: ${email}. Say warm goodbye only. Do NOT ask for email again.`,
     };
   }
@@ -69,8 +69,8 @@ export function determineConversationState(
     return {
       state: 'post_booking',
       context: 'POST_BOOKING: Just booked, need to collect email.',
-      allowedTools: ['update_lead'],
-      blockedTools: ['check_calendar', 'book_appointment', 'cancel_appointment'],
+      allowedTools: ['update_lead', 'cancel_appointment'],
+      blockedTools: ['check_calendar', 'book_appointment'],
       promptAddendum: `POST-BOOKING STATE: Booking confirmed. ONLY ask: "To send you a confirmation, what's your email address?" Do NOT offer more slots.`,
     };
   }
