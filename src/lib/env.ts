@@ -14,6 +14,11 @@ export const env = {
   // If they drift the function returns 401 and no replies are sent.
   SUPABASE_EDGE_FUNCTION_URL: process.env.SUPABASE_EDGE_FUNCTION_URL || '',
   EDGE_FUNCTION_SECRET: process.env.EDGE_FUNCTION_SECRET || '',
+  // Region to execute the Edge Function in, sent as the `x-region` header.
+  // Set this to the SAME region as the Supabase database so the function's many
+  // DB round-trips are local (cross-region adds ~200ms/query). Default matches
+  // this project's DB region (ap-southeast-2 / Sydney).
+  SUPABASE_EDGE_FUNCTION_REGION: process.env.SUPABASE_EDGE_FUNCTION_REGION || 'ap-southeast-2',
   
   // NextAuth
   NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
